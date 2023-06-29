@@ -26,5 +26,5 @@ type formula = boolean_exp
 
 val form_tostr : formula -> string
 val subs : formula -> variable -> exp -> formula
-val implies : formula -> formula -> (bool Lazy.t)
+val implies : formula -> formula -> bool Lazy.t
 val fresh_var : formula -> variable

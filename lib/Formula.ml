@@ -97,10 +97,10 @@ let rec is_new_var exp var =
       is_new_var (Term t1) var && is_new_var (Term t2) var
   | Boolean (Less (t1, t2)) ->
       is_new_var (Term t1) var && is_new_var (Term t2) var
-  | Boolean (Exists (v, b)) -> v != var && is_new_var (Boolean b) var
-  | Boolean (Forall (v, b)) -> v != var && is_new_var (Boolean b) var
+  | Boolean (Exists (v, b)) -> v <> var && is_new_var (Boolean b) var
+  | Boolean (Forall (v, b)) -> v <> var && is_new_var (Boolean b) var
   | Term (Int _) -> true
-  | Term (TVar v) -> v != var
+  | Term (TVar v) -> v <> var
   | Term (Plus (t1, t2)) -> is_new_var (Term t1) var && is_new_var (Term t2) var
 
 let fresh_var form =
@@ -224,15 +224,16 @@ let implies hyp conc =
         (Array.of_list [ "z3"; "-smt2"; Printf.sprintf "%s.smt" filename_pref ]))
     else
       (* Return function that collects SMT result *)
-      (lazy 
-      (if Unix.waitpid [] kid_pid <> (kid_pid, WEXITED 0) then
-        false
-      else
-        let f_channel = open_in (Printf.sprintf "%s.out" filename_pref) in
-        input_line f_channel = "unsat"))
-  (* TODO: It might be good to have the below behavior be the default in both branches, but waitpid might be better. *)
-  else (lazy 
-    (while not (Sys.file_exists (Printf.sprintf "%s.out" filename_pref)) do Unix.sleep(1) done;
-    let f_channel = open_in (Printf.sprintf "%s.out" filename_pref) in
-        (input_line f_channel) = "unsat")
-  );
+      lazy
+        (if Unix.waitpid [] kid_pid <> (kid_pid, WEXITED 0) then false
+         else
+           let f_channel = open_in (Printf.sprintf "%s.out" filename_pref) in
+           input_line f_channel = "unsat")
+    (* TODO: It might be good to have the below behavior be the default in both branches, but waitpid might be better. *)
+  else
+    lazy
+      (while not (Sys.file_exists (Printf.sprintf "%s.out" filename_pref)) do
+         Unix.sleep 1
+       done;
+       let f_channel = open_in (Printf.sprintf "%s.out" filename_pref) in
+       input_line f_channel = "unsat")

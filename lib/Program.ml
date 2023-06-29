@@ -1,9 +1,12 @@
+open NonTerminal
+
 type numeric_exp =
   | Zero
   | One
   | Var of string
   | Plus of numeric_exp * numeric_exp
   | ITE of boolean_exp * numeric_exp * numeric_exp
+  | NTerm of numeric_exp nonterminal
 
 and boolean_exp =
   | True
@@ -33,6 +36,7 @@ let rec prog_tostr prog =
   | Numeric (ITE (b, n1, n2)) ->
       Printf.sprintf "(if %s then %s else %s)" (prog_tostr (Boolean b))
         (prog_tostr (Numeric n1)) (prog_tostr (Numeric n2))
+  | Numeric (NTerm nterm) -> to_str nterm
   | Boolean True -> "T"
   | Boolean False -> "F"
   | Boolean (Not b) -> Printf.sprintf "!%s" (prog_tostr (Boolean b))
