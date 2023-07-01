@@ -1,7 +1,7 @@
 open ULSynth.Formula
 open ULSynth.Program
 open ULSynth.ProofRule
-(* open ULSynth.NonTerminal *)
+open ULSynth.NonTerminal
 
 let check_proof trip expected =
   let a = ruleApp_tostr (prove trip) in
@@ -80,7 +80,7 @@ let test_binary =
   (* Equals *)
   check_proof
     {
-      pre = Equals (Int 0, TVar (Var "x"));
+      pre = Equals (Int 0, TVar (T "x"));
       prog = Boolean (Equals (Zero, Var "x"));
       post = BVar BT;
     }
@@ -92,7 +92,7 @@ let test_binary =
   (* Less *)
   check_proof
     {
-      pre = Not (Less (Int 0, TVar (Var "x")));
+      pre = Not (Less (Int 0, TVar (T "x")));
       prog = Boolean (Less (Zero, Var "x"));
       post = Not (BVar BT);
     }
@@ -108,7 +108,7 @@ let test_ITE =
     {
       pre = False;
       prog = Numeric (ITE (Equals (Var "x", Zero), One, Var "x"));
-      post = Equals (TVar ET, TVar (Var "x"));
+      post = Equals (TVar ET, TVar (T "x"));
     }
     "Var: -> {(((x == 0) => (1 == x)) && (!(x == 0) => (x == x)))} x {(((e_t \
      == 0) => (1 == x)) && (!(e_t == 0) => (x == x)))}\n\
@@ -136,7 +136,7 @@ let test_ITE =
       prog =
         Stmt
           (ITE (Equals (One, Var "x"), Assign ("x", Zero), Assign ("x", One)));
-      post = Equals (TVar (Var "x"), Int 1);
+      post = Equals (TVar (T "x"), Int 1);
     }
     "One: -> {(((1 == x) => (0 == 1)) && (!(1 == x) => (1 == 1)))} 1 {(((e_t \
      == x) => (0 == 1)) && (!(e_t == x) => (1 == 1)))}\n\
@@ -166,7 +166,7 @@ let test_stmt =
     {
       pre = False;
       prog = Stmt (Assign ("x", Plus (One, One)));
-      post = Equals (TVar (Var "x"), Int 2);
+      post = Equals (TVar (T "x"), Int 2);
     }
     "One: -> {((1 + 1) == 2)} 1 {((e_t + 1) == 2)}\n\
      One: -> {((fresh1 + 1) == 2)} 1 {((fresh1 + e_t) == 2)}\n\
@@ -181,7 +181,7 @@ let test_stmt =
     {
       pre = True;
       prog = Stmt (Seq (Assign ("x", Plus (One, One)), Assign ("x", One)));
-      post = Equals (TVar (Var "x"), Int 1);
+      post = Equals (TVar (T "x"), Int 1);
     }
     "One: -> {(1 == 1)} 1 {(1 == 1)}\n\
      One: -> {(1 == 1)} 1 {(1 == 1)}\n\
@@ -202,7 +202,7 @@ let test_while =
     {
       pre = True;
       prog = Stmt (While (False, True, Assign ("x", One)));
-      post = Equals (TVar (Var "x"), Int 1);
+      post = Equals (TVar (T "x"), Int 1);
     }
     "False: -> {(T => ((!F => (x == 1)) && (F => T)))} F {(T => ((!b_t => (x \
      == 1)) && (b_t => T)))}\n\
@@ -217,14 +217,14 @@ let test_while =
      (Inv=T) (x := 1)) {(x == 1)}";
   check_proof
     {
-      pre = Less (TVar (Var "x"), Int 4);
+      pre = Less (TVar (T "x"), Int 4);
       prog =
         Stmt
           (While
              ( Less (Var "x", Plus (One, Plus (One, One))),
                True,
                Assign ("x", Plus (Var "x", Plus (One, One))) ));
-      post = Equals (TVar (Var "x"), Int 3);
+      post = Equals (TVar (T "x"), Int 3);
     }
     "Var: -> {(T => ((!(x < (1 + (1 + 1))) => (x == 3)) && ((x < (1 + (1 + \
      1))) => T)))} x {(T => ((!(e_t < (1 + (1 + 1))) => (x == 3)) && ((e_t < \
@@ -284,24 +284,24 @@ let test_while =
     {
       pre =
         And
-          ( Less (TVar (Var "x"), Int 5),
+          ( Less (TVar (T "x"), Int 5),
             Exists
-              ( Var "k",
-                Equals (TVar (Var "x"), Plus (TVar (Var "k"), TVar (Var "k")))
+              ( TermVar (T "k"),
+                Equals (TVar (T "x"), Plus (TVar (T "k"), TVar (T "k")))
               ) );
       prog =
         Stmt
           (While
              ( Less (Var "x", Plus (One, Plus (One, One))),
                And
-                 ( Less (TVar (Var "x"), Int 5),
+                 ( Less (TVar (T "x"), Int 5),
                    Exists
-                     ( Var "k",
+                     ( TermVar (T "k"),
                        Equals
-                         (TVar (Var "x"), Plus (TVar (Var "k"), TVar (Var "k")))
+                         (TVar (T "x"), Plus (TVar (T "k"), TVar (T "k")))
                      ) ),
                Assign ("x", Plus (Var "x", Plus (One, One))) ));
-      post = Equals (TVar (Var "x"), Int 4);
+      post = Equals (TVar (T "x"), Int 4);
     }
     "Var: -> {(((x < 5) && ((Exists k). (x == (k + k)))) => ((!(x < (1 + (1 + \
      1))) => (x == 4)) && ((x < (1 + (1 + 1))) => (((x + (1 + 1)) < 5) && \
@@ -429,24 +429,202 @@ let test_while =
      (x + (1 + 1)))) {(x == 4)}"
 
 let test_nonrec_nonterm =
-   check_proof
-     {
-       pre = True;
-       prog = Numeric (NTerm {name  = "N"; expansions = [One; Plus (One, Zero)]; strongest = None});
-       post = Less (TVar (ET), Int 2)
-     }
-     "One: -> {((1 + 0) < 2)} 1 {((e_t + 0) < 2)}\n\
-     Zero: -> {((fresh1 + 0) < 2)} 0 {((fresh1 + e_t) < 2)}\n\
-     Plus: {((1 + 0) < 2)} 1 {((e_t + 0) < 2)}, {((fresh1 + 0) < 2)} 0 {((fresh1 + e_t) < 2)} -> {((1 + 0) < 2)} (1 + 0) {(e_t < 2)}\n\
-     One: -> {(1 < 2)} 1 {(e_t < 2)}\n\
-     GrmDisj: {((1 + 0) < 2)} (1 + 0) {(e_t < 2)}, {(1 < 2)} 1 {(e_t < 2)} -> {((T && ((1 + 0) < 2)) && (1 < 2))} N {(e_t < 2)}\n\
-     Weaken: {((T && ((1 + 0) < 2)) && (1 < 2))} N {(e_t < 2)} -> {T} N {(e_t < 2)}"
+  (* Expression *)
+  check_proof
+    {
+      pre = True;
+      prog =
+        Numeric
+          (NNTerm
+             {
+               name = "N";
+               expansions = [ One; Plus (One, Zero) ];
+               strongest = None;
+             });
+      post = Less (TVar ET, Int 2);
+    }
+    "One: -> {(1 < 2)} 1 {(e_t < 2)}\n\
+    One: -> {((1 + 0) < 2)} 1 {((e_t + 0) < 2)}\n\
+    Zero: -> {((fresh1 + 0) < 2)} 0 {((fresh1 + e_t) < 2)}\n\
+    Plus: {((1 + 0) < 2)} 1 {((e_t + 0) < 2)}, {((fresh1 + 0) < 2)} 0 {((fresh1 + e_t) < 2)} -> {((1 + 0) < 2)} (1 + 0) {(e_t < 2)}\n\
+    GrmDisj: {(1 < 2)} 1 {(e_t < 2)}, {((1 + 0) < 2)} (1 + 0) {(e_t < 2)} -> {((T && (1 < 2)) && ((1 + 0) < 2))} N {(e_t < 2)}\n\
+    Weaken: {((T && (1 < 2)) && ((1 + 0) < 2))} N {(e_t < 2)} -> {T} N {(e_t < 2)}";
+
+  (* Boolean *)
+  check_proof
+    {
+      pre = True;
+      prog =
+        Boolean
+          (BNTerm
+              {
+                name = "B";
+                expansions = [True; Equals (Zero, Zero) ];
+                strongest = None;
+              });
+      post = (BVar BT);
+    }
+    "True: -> {T} T {b_t}\n\
+    Zero: -> {(0 == 0)} 0 {(e_t == 0)}\n\
+    Zero: -> {(fresh1 == 0)} 0 {(fresh1 == e_t)}\n\
+    Equals: {(0 == 0)} 0 {(e_t == 0)}, {(fresh1 == 0)} 0 {(fresh1 == e_t)} -> {(0 == 0)} (0 = 0) {b_t}\n\
+    GrmDisj: {T} T {b_t}, {(0 == 0)} (0 = 0) {b_t} -> {((T && T) && (0 == 0))} B {b_t}\n\
+    Weaken: {((T && T) && (0 == 0))} B {b_t} -> {T} B {b_t}";
+
+  (* Statement *)
+  check_proof
+    {
+      pre = True;
+      prog =
+        Stmt
+          (SNTerm
+              {
+                name = "S";
+                expansions = [Assign ("x", One); Seq (Assign ("x", Zero), Assign ("x", One)) ];
+                strongest = None;
+              });
+      post = Equals (TVar (T "x"), Int 1);
+    }
+    "One: -> {(1 == 1)} 1 {(e_t == 1)}\n\
+    Assign: {(1 == 1)} 1 {(e_t == 1)} -> {(1 == 1)} (x := 1) {(x == 1)}\n\
+    Zero: -> {(1 == 1)} 0 {(1 == 1)}\n\
+    Assign: {(1 == 1)} 0 {(1 == 1)} -> {(1 == 1)} (x := 0) {(1 == 1)}\n\
+    One: -> {(1 == 1)} 1 {(e_t == 1)}\n\
+    Assign: {(1 == 1)} 1 {(e_t == 1)} -> {(1 == 1)} (x := 1) {(x == 1)}\n\
+    Seq: {(1 == 1)} (x := 0) {(1 == 1)}, {(1 == 1)} (x := 1) {(x == 1)} -> {(1 == 1)} ((x := 0); (x := 1)) {(x == 1)}\n\
+    GrmDisj: {(1 == 1)} (x := 1) {(x == 1)}, {(1 == 1)} ((x := 0); (x := 1)) {(x == 1)} -> {((T && (1 == 1)) && (1 == 1))} S {(x == 1)}\n\
+    Weaken: {((T && (1 == 1)) && (1 == 1))} S {(x == 1)} -> {T} S {(x == 1)}"
+
+let test_rec_nonterm =
+  (* Expression *)
+  let rec n =
+    {
+      name = "N";
+      expansions = [ One; Plus (One, NNTerm n) ];
+      strongest =
+        Some ([ ((TermVar ET), TermVar (T "e_t_2")); ((BoolVar BT), BoolVar (B "b_t_2")) ], Less (Int 0, TVar ET));
+    }
+  in
+  check_proof
+    { pre = True; prog = Numeric (NNTerm n); post = Less (Int 0, TVar ET) }
+    "One: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(0 < e_t)] \
+     {(0 < e_t)}] |- {(0 < 1)} 1 {(0 < e_t)}\n\
+     One: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(0 < e_t)] \
+     {(0 < e_t)}] |- {((Forall fresh2). ((Forall fresh3). ((0 < fresh2) => (0 \
+     < (1 + fresh2)))))} 1 {((Forall fresh2). ((Forall fresh3). ((0 < fresh2) \
+     => (0 < (e_t + fresh2)))))}\n\
+     ApplyHP: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(0 < \
+     e_t)] {(0 < e_t)}] |- {((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N \
+     MGF=(0 < e_t)] {(0 < e_t)}\n\
+     Adapt: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(0 < e_t)] \
+     {(0 < e_t)}] |- {((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(0 < \
+     e_t)] {(0 < e_t)} -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N \
+     MGF=(0 < e_t)] {(0 < e_t)}] |- {((Forall fresh2). ((Forall fresh3). ((0 < \
+     fresh2) => (0 < (fresh1 + fresh2)))))} [N MGF=(0 < e_t)] {(0 < (fresh1 + e_t))}\n\
+     Plus: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(0 < e_t)] {(0 \
+     < e_t)}] |- {((Forall fresh2). ((Forall fresh3). ((0 < fresh2) => (0 < (1 \
+     + fresh2)))))} 1 {((Forall fresh2). ((Forall fresh3). ((0 < fresh2) => (0 \
+     < (e_t + fresh2)))))}, [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N \
+     MGF=(0 < e_t)] {(0 < e_t)}] |- {((Forall fresh2). ((Forall fresh3). ((0 < \
+     fresh2) => (0 < (fresh1 + fresh2)))))} [N MGF=(0 < e_t)] {(0 < (fresh1 + e_t))} -> \
+     [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(0 < e_t)] {(0 < \
+     e_t)}] |- {((Forall fresh2). ((Forall fresh3). ((0 < fresh2) => (0 < (1 + \
+     fresh2)))))} (1 + [N MGF=(0 < e_t)]) {(0 < e_t)}\n\
+     HP: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(0 < e_t)] {(0 < \
+     e_t)}] |- {(0 < 1)} 1 {(0 < e_t)}, [{((T && (e_t == e_t_2)) && (b_t <-> \
+     b_t_2))} [N MGF=(0 < e_t)] {(0 < e_t)}] |- {((Forall fresh2). ((Forall \
+     fresh3). ((0 < fresh2) => (0 < (1 + fresh2)))))} (1 + [N MGF=(0 < e_t)]) \
+     {(0 < e_t)} -> {((T && (0 < 1)) && ((Forall fresh2). ((Forall fresh3). \
+     ((0 < fresh2) => (0 < (1 + fresh2))))))} [N MGF=(0 < e_t)] {(0 < e_t)}\n\
+     Weaken: {((T && (0 < 1)) && ((Forall fresh2). ((Forall fresh3). \
+     ((0 < fresh2) => (0 < (1 + fresh2))))))} [N MGF=(0 < e_t)] {(0 < e_t)} -> \
+     {((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(0 < e_t)] {(0 < e_t)}\n\
+     Adapt: {((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(0 < e_t)] \
+     {(0 < e_t)} -> {((Forall fresh1). ((Forall fresh2). ((0 < fresh1) => (0 < \
+     fresh1))))} [N MGF=(0 < e_t)] {(0 < e_t)}\n\
+     Weaken: {((Forall fresh1). ((Forall fresh2). ((0 < fresh1) => (0 < \
+     fresh1))))} [N MGF=(0 < e_t)] {(0 < e_t)} -> {T} [N MGF=(0 < e_t)] {(0 < \
+     e_t)}";
+
+  (* Boolean *)
+  let rec b =
+    {
+      name = "B";
+      expansions = [ Equals (Var "x", One); Or (BNTerm b, Equals (Var "x", Zero)) ];
+      strongest =
+        Some ([ ((TermVar ET), TermVar (T "e_t_2")); ((BoolVar BT), BoolVar (B "b_t_2")) ], Implies (Equals (TVar (T "x"), Int 1), BVar BT));
+    }
+  in
+  check_proof
+    { pre = Equals(TVar (T "x"), Int 1); prog = Boolean (BNTerm b); post = BVar BT }
+    "Var: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=((x == 1) => b_t)] {((x == 1) => b_t)}] |- {((x == 1) => (x == 1))} x {((x == 1) => (e_t == 1))}\n\
+    One: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=((x == 1) => b_t)] {((x == 1) => b_t)}] |- {((x == 1) => (fresh1 == 1))} 1 {((x == 1) => (fresh1 == e_t))}\n\
+    Equals: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=((x == 1) => b_t)] {((x == 1) => b_t)}] |- {((x == 1) => (x == 1))} x {((x == 1) => (e_t == 1))}, [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=((x == 1) => b_t)] {((x == 1) => b_t)}] |- {((x == 1) => (fresh1 == 1))} 1 {((x == 1) => (fresh1 == e_t))} -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=((x == 1) => b_t)] {((x == 1) => b_t)}] |- {((x == 1) => (x == 1))} (x = 1) {((x == 1) => b_t)}\n\
+    ApplyHP: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=((x == 1) => b_t)] {((x == 1) => b_t)}] |- {((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=((x == 1) => b_t)] {((x == 1) => b_t)}\n\
+    Adapt: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=((x == 1) => b_t)] {((x == 1) => b_t)}] |- {((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=((x == 1) => b_t)] {((x == 1) => b_t)} -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=((x == 1) => b_t)] {((x == 1) => b_t)}] |- {((Forall fresh1). ((Forall fresh2). (((x == 1) => fresh2) => ((x == 1) => (fresh2 || (x == 0))))))} [B MGF=((x == 1) => b_t)] {((x == 1) => (b_t || (x == 0)))}\n\
+    Var: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=((x == 1) => b_t)] {((x == 1) => b_t)}] |- {((x == 1) => (fresh1 || (x == 0)))} x {((x == 1) => (fresh1 || (e_t == 0)))}\n\
+    Zero: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=((x == 1) => b_t)] {((x == 1) => b_t)}] |- {((x == 1) => (fresh1 || (fresh2 == 0)))} 0 {((x == 1) => (fresh1 || (fresh2 == e_t)))}\n\
+    Equals: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=((x == 1) => b_t)] {((x == 1) => b_t)}] |- {((x == 1) => (fresh1 || (x == 0)))} x {((x == 1) => (fresh1 || (e_t == 0)))}, [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=((x == 1) => b_t)] {((x == 1) => b_t)}] |- {((x == 1) => (fresh1 || (fresh2 == 0)))} 0 {((x == 1) => (fresh1 || (fresh2 == e_t)))} -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=((x == 1) => b_t)] {((x == 1) => b_t)}] |- {((x == 1) => (fresh1 || (x == 0)))} (x = 0) {((x == 1) => (fresh1 || b_t))}\n\
+    Or: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=((x == 1) => b_t)] {((x == 1) => b_t)}] |- {((Forall fresh1). ((Forall fresh2). (((x == 1) => fresh2) => ((x == 1) => (fresh2 || (x == 0))))))} [B MGF=((x == 1) => b_t)] {((x == 1) => (b_t || (x == 0)))}, [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=((x == 1) => b_t)] {((x == 1) => b_t)}] |- {((x == 1) => (fresh1 || (x == 0)))} (x = 0) {((x == 1) => (fresh1 || b_t))} -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=((x == 1) => b_t)] {((x == 1) => b_t)}] |- {((Forall fresh1). ((Forall fresh2). (((x == 1) => fresh2) => ((x == 1) => (fresh2 || (x == 0))))))} ([B MGF=((x == 1) => b_t)] || (x = 0)) {((x == 1) => b_t)}\n\
+    HP: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=((x == 1) => b_t)] {((x == 1) => b_t)}] |- {((x == 1) => (x == 1))} (x = 1) {((x == 1) => b_t)}, [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=((x == 1) => b_t)] {((x == 1) => b_t)}] |- {((Forall fresh1). ((Forall fresh2). (((x == 1) => fresh2) => ((x == 1) => (fresh2 || (x == 0))))))} ([B MGF=((x == 1) => b_t)] || (x = 0)) {((x == 1) => b_t)} -> {((T && ((x == 1) => (x == 1))) && ((Forall fresh1). ((Forall fresh2). (((x == 1) => fresh2) => ((x == 1) => (fresh2 || (x == 0)))))))} [B MGF=((x == 1) => b_t)] {((x == 1) => b_t)}\n\
+    Weaken: {((T && ((x == 1) => (x == 1))) && ((Forall fresh1). ((Forall fresh2). (((x == 1) => fresh2) => ((x == 1) => (fresh2 || (x == 0)))))))} [B MGF=((x == 1) => b_t)] {((x == 1) => b_t)} -> {((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=((x == 1) => b_t)] {((x == 1) => b_t)}\n\
+    Adapt: {((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=((x == 1) => b_t)] {((x == 1) => b_t)} -> {((Forall fresh1). ((Forall fresh2). (((x == 1) => fresh2) => fresh2)))} [B MGF=((x == 1) => b_t)] {b_t}\n\
+    Weaken: {((Forall fresh1). ((Forall fresh2). (((x == 1) => fresh2) => fresh2)))} [B MGF=((x == 1) => b_t)] {b_t} -> {(x == 1)} [B MGF=((x == 1) => b_t)] {b_t}";
+
+    
+  (* Statement + Numeric *)
+  (* This proof I have not yet hand-checked. *)
+  let rec n =
+    {
+      name = "N";
+      expansions = [ One; Plus (Zero, NNTerm n) ];
+      strongest =
+        Some ([ ((TermVar ET), TermVar (T "e_t_2")); ((BoolVar BT), BoolVar (B "b_t_2")) ], Equals (Int 1, TVar ET));
+    }
+  and s = 
+    {
+      name = "S";
+      expansions = [ Assign ("x", NNTerm n); Seq (SNTerm s, Assign ("x", Plus (Var "x", NNTerm n))) ];
+      strongest =
+        Some ([ ((TermVar ET), TermVar (T "e_t_2")); ((BoolVar BT), BoolVar (B "b_t_2")); ((TermVar (T "x")), TermVar (T "x_2")) ], Less (Int 0, TVar (T "x")));
+    }
+  in
+  check_proof
+    { pre = Equals(TVar (T "x"), Int 1); prog = Stmt (SNTerm s); post = Less ((Int (-1)), TVar (T "x")) }
+    "One: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(1 == e_t)] {(1 == e_t)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {(1 == 1)} 1 {(1 == e_t)}\n\
+    Zero: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(1 == e_t)] {(1 == e_t)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (1 == (0 + fresh2)))))} 0 {((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (1 == (e_t + fresh2)))))}\n\
+    ApplyHP: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(1 == e_t)] {(1 == e_t)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(1 == e_t)] {(1 == e_t)}\n\
+    Adapt: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(1 == e_t)] {(1 == e_t)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(1 == e_t)] {(1 == e_t)} -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(1 == e_t)] {(1 == e_t)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (1 == (fresh1 + fresh2)))))} [N MGF=(1 == e_t)] {(1 == (fresh1 + e_t))}\n\
+    Plus: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(1 == e_t)] {(1 == e_t)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (1 == (0 + fresh2)))))} 0 {((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (1 == (e_t + fresh2)))))}, [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(1 == e_t)] {(1 == e_t)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (1 == (fresh1 + fresh2)))))} [N MGF=(1 == e_t)] {(1 == (fresh1 + e_t))} -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(1 == e_t)] {(1 == e_t)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (1 == (0 + fresh2)))))} (0 + [N MGF=(1 == e_t)]) {(1 == e_t)}\n\
+    HP: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(1 == e_t)] {(1 == e_t)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {(1 == 1)} 1 {(1 == e_t)}, [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(1 == e_t)] {(1 == e_t)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (1 == (0 + fresh2)))))} (0 + [N MGF=(1 == e_t)]) {(1 == e_t)} -> [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((T && (1 == 1)) && ((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (1 == (0 + fresh2))))))} [N MGF=(1 == e_t)] {(1 == e_t)}\n\
+    Weaken: [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((T && (1 == 1)) && ((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (1 == (0 + fresh2))))))} [N MGF=(1 == e_t)] {(1 == e_t)} -> [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(1 == e_t)] {(1 == e_t)}\n\
+    Adapt: [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(1 == e_t)] {(1 == e_t)} -> [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((Forall fresh1). ((Forall fresh2). ((1 == fresh1) => (0 < fresh1))))} [N MGF=(1 == e_t)] {(0 < e_t)}\n\
+    Assign: [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((Forall fresh1). ((Forall fresh2). ((1 == fresh1) => (0 < fresh1))))} [N MGF=(1 == e_t)] {(0 < e_t)} -> [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((Forall fresh1). ((Forall fresh2). ((1 == fresh1) => (0 < fresh1))))} (x := [N MGF=(1 == e_t)]) {(0 < x)}\n\
+    ApplyHP: -> [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}\n\
+    Adapt: [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)} -> [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((Forall fresh1). ((Forall fresh4). ((Forall fresh5). ((0 < fresh5) => ((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (0 < (fresh5 + fresh2)))))))))} [S MGF=(0 < x)] {((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (0 < (x + fresh2)))))}\n\
+    Var: -> [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (0 < (x + fresh2)))))} x {((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (0 < (e_t + fresh2)))))}\n\
+    One: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(1 == e_t)] {(1 == e_t)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {(1 == 1)} 1 {(1 == e_t)}\n\
+    Zero: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(1 == e_t)] {(1 == e_t)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (1 == (0 + fresh2)))))} 0 {((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (1 == (e_t + fresh2)))))}\n\
+    ApplyHP: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(1 == e_t)] {(1 == e_t)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(1 == e_t)] {(1 == e_t)}\n\
+    Adapt: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(1 == e_t)] {(1 == e_t)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(1 == e_t)] {(1 == e_t)} -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(1 == e_t)] {(1 == e_t)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (1 == (fresh1 + fresh2)))))} [N MGF=(1 == e_t)] {(1 == (fresh1 + e_t))}\n\
+    Plus: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(1 == e_t)] {(1 == e_t)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (1 == (0 + fresh2)))))} 0 {((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (1 == (e_t + fresh2)))))}, [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(1 == e_t)] {(1 == e_t)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (1 == (fresh1 + fresh2)))))} [N MGF=(1 == e_t)] {(1 == (fresh1 + e_t))} -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(1 == e_t)] {(1 == e_t)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (1 == (0 + fresh2)))))} (0 + [N MGF=(1 == e_t)]) {(1 == e_t)}\n\
+    HP: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(1 == e_t)] {(1 == e_t)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {(1 == 1)} 1 {(1 == e_t)}, [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(1 == e_t)] {(1 == e_t)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (1 == (0 + fresh2)))))} (0 + [N MGF=(1 == e_t)]) {(1 == e_t)} -> [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((T && (1 == 1)) && ((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (1 == (0 + fresh2))))))} [N MGF=(1 == e_t)] {(1 == e_t)}\n\
+    Weaken: [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((T && (1 == 1)) && ((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (1 == (0 + fresh2))))))} [N MGF=(1 == e_t)] {(1 == e_t)} -> [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(1 == e_t)] {(1 == e_t)}\n\
+    Adapt: [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(1 == e_t)] {(1 == e_t)} -> [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (0 < (fresh1 + fresh2)))))} [N MGF=(1 == e_t)] {(0 < (fresh1 + e_t))}\n\
+    Plus: [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (0 < (x + fresh2)))))} x {((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (0 < (e_t + fresh2)))))}, [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (0 < (fresh1 + fresh2)))))} [N MGF=(1 == e_t)] {(0 < (fresh1 + e_t))} -> [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (0 < (x + fresh2)))))} (x + [N MGF=(1 == e_t)]) {(0 < e_t)}\n\
+    Assign: [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (0 < (x + fresh2)))))} (x + [N MGF=(1 == e_t)]) {(0 < e_t)} -> [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (0 < (x + fresh2)))))} (x := (x + [N MGF=(1 == e_t)])) {(0 < x)}\n\
+    Seq: [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((Forall fresh1). ((Forall fresh4). ((Forall fresh5). ((0 < fresh5) => ((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (0 < (fresh5 + fresh2)))))))))} [S MGF=(0 < x)] {((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (0 < (x + fresh2)))))}, [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (0 < (x + fresh2)))))} (x := (x + [N MGF=(1 == e_t)])) {(0 < x)} -> [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((Forall fresh1). ((Forall fresh4). ((Forall fresh5). ((0 < fresh5) => ((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (0 < (fresh5 + fresh2)))))))))} ([S MGF=(0 < x)]; (x := (x + [N MGF=(1 == e_t)]))) {(0 < x)}\n\
+    HP: [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((Forall fresh1). ((Forall fresh2). ((1 == fresh1) => (0 < fresh1))))} (x := [N MGF=(1 == e_t)]) {(0 < x)}, [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}] |- {((Forall fresh1). ((Forall fresh4). ((Forall fresh5). ((0 < fresh5) => ((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (0 < (fresh5 + fresh2)))))))))} ([S MGF=(0 < x)]; (x := (x + [N MGF=(1 == e_t)]))) {(0 < x)} -> {((T && ((Forall fresh1). ((Forall fresh2). ((1 == fresh1) => (0 < fresh1))))) && ((Forall fresh1). ((Forall fresh4). ((Forall fresh5). ((0 < fresh5) => ((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (0 < (fresh5 + fresh2))))))))))} [S MGF=(0 < x)] {(0 < x)}\n\
+    Weaken: {((T && ((Forall fresh1). ((Forall fresh2). ((1 == fresh1) => (0 < fresh1))))) && ((Forall fresh1). ((Forall fresh4). ((Forall fresh5). ((0 < fresh5) => ((Forall fresh2). ((Forall fresh3). ((1 == fresh2) => (0 < (fresh5 + fresh2))))))))))} [S MGF=(0 < x)] {(0 < x)} -> {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)}\n\
+    Adapt: {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(0 < x)] {(0 < x)} -> {((Forall fresh1). ((Forall fresh2). ((Forall fresh3). ((0 < fresh3) => (-1 < fresh3)))))} [S MGF=(0 < x)] {(-1 < x)}\n\
+    Weaken: {((Forall fresh1). ((Forall fresh2). ((Forall fresh3). ((0 < fresh3) => (-1 < fresh3)))))} [S MGF=(0 < x)] {(-1 < x)} -> {(x == 1)} [S MGF=(0 < x)] {(-1 < x)}"
 
 let () =
   test_axiom;
   test_not;
   test_binary;
-  test_stmt;
   test_ITE;
+  test_stmt;
   test_while;
-  test_nonrec_nonterm
+  test_nonrec_nonterm;
+  test_rec_nonterm  

@@ -1,4 +1,6 @@
 open NonTerminal
+open Variable
+module VS = Set.Make (Variable)
 
 type numeric_exp =
   | Zero
@@ -6,7 +8,7 @@ type numeric_exp =
   | Var of string
   | Plus of numeric_exp * numeric_exp
   | ITE of boolean_exp * numeric_exp * numeric_exp
-  | NTerm of numeric_exp nonterminal
+  | NNTerm of numeric_exp nonterminal
 
 and boolean_exp =
   | True
@@ -16,12 +18,16 @@ and boolean_exp =
   | Or of boolean_exp * boolean_exp
   | Equals of numeric_exp * numeric_exp
   | Less of numeric_exp * numeric_exp
+  | BNTerm of boolean_exp nonterminal
 
 type stmt =
   | Assign of string * numeric_exp
   | Seq of stmt * stmt
   | ITE of boolean_exp * stmt * stmt
   | While of boolean_exp * Formula.formula * stmt
+  | SNTerm of stmt nonterminal
+
+module SNTS = Set.Make (struct type t = stmt nonterminal let compare = compare end)
 
 type program = Numeric of numeric_exp | Boolean of boolean_exp | Stmt of stmt
 
@@ -36,7 +42,7 @@ let rec prog_tostr prog =
   | Numeric (ITE (b, n1, n2)) ->
       Printf.sprintf "(if %s then %s else %s)" (prog_tostr (Boolean b))
         (prog_tostr (Numeric n1)) (prog_tostr (Numeric n2))
-  | Numeric (NTerm nterm) -> to_str nterm
+  | Numeric (NNTerm nterm) -> to_str nterm
   | Boolean True -> "T"
   | Boolean False -> "F"
   | Boolean (Not b) -> Printf.sprintf "!%s" (prog_tostr (Boolean b))
@@ -52,6 +58,7 @@ let rec prog_tostr prog =
   | Boolean (Less (n1, n2)) ->
       Printf.sprintf "(%s < %s)" (prog_tostr (Numeric n1))
         (prog_tostr (Numeric n2))
+  | Boolean (BNTerm nterm) -> to_str nterm
   | Stmt (Assign (v, n)) ->
       Printf.sprintf "(%s := %s)"
         (prog_tostr (Numeric (Var v)))
@@ -64,3 +71,26 @@ let rec prog_tostr prog =
   | Stmt (While (b, inv, s)) ->
       Printf.sprintf "(while %s do (Inv=%s) %s)" (prog_tostr (Boolean b))
         (Formula.form_tostr inv) (prog_tostr (Stmt s))
+  | Stmt (SNTerm nterm) -> to_str nterm
+
+
+(* Returns vars (as formula vars) whose values may be changed by any program in the set.
+   This is good to have for the adapt rule. *)
+let rec reassigned_vars_helper prog examined=
+  match prog with
+    Numeric _ -> VS.empty
+  | Boolean _ -> VS.empty
+  | Stmt (Assign (v, _)) -> VS.singleton (TermVar (T v))
+  (* | Stmt (Assign (_, _)) -> VS.empty *)
+  | Stmt (Seq (s1, s2)) ->
+      VS.union
+        (reassigned_vars_helper (Stmt s1) examined)
+        (reassigned_vars_helper (Stmt s2) examined)
+  | Stmt (ITE (_, s1, s2)) ->
+      VS.union
+        (reassigned_vars_helper (Stmt s1) examined)
+        (reassigned_vars_helper (Stmt s2) examined)
+  | Stmt (While (_, _, s)) -> reassigned_vars_helper (Stmt s) examined
+  | Stmt (SNTerm n) -> if (SNTS.mem n examined) then VS.empty else (List.fold_left (fun a b -> VS.union a b) VS.empty (List.map (fun expansion -> reassigned_vars_helper (Stmt expansion) (SNTS.add n examined)) n.expansions))
+
+let reassigned_vars prog = VS.add (TermVar ET) (VS.add (BoolVar BT) (reassigned_vars_helper prog SNTS.empty))
