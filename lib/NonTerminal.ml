@@ -9,7 +9,6 @@ type 'program nonterminal = {
   strongest : ((variable * variable) list * formula) option;
 }
 
-
 let to_str nterm =
   match nterm.strongest with
   | None -> nterm.name

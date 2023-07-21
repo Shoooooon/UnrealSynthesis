@@ -5,6 +5,7 @@ open NonTerminal
 
 exception Bad_Strongest_Triple of string * string
 
+type proofMode = HOLE_SYNTH | INVS_SPECIFIED
 type triple = { pre : formula; prog : program; post : formula }
 type triple_no_pre = { prog : program; post : formula }
 type contextualized_triple = { context : triple list; trip : triple }
@@ -159,7 +160,11 @@ let rec ruleApp_tostr rule =
         (ctrip_tostr ctrip)
 
 (* Handles building proofs for the 3 types of non-terminals polymorphically *)
-let nonterm_handler nterm ctrip to_prog build_wpc_proof =
+let nonterm_handler nterm ctrip to_prog
+    (build_wpc_proof :
+      contextualized_triple_no_pre ->
+      (formula -> formula -> bool Lazy.t) ->
+      ruleApp) implies =
   let trip = ctrip.trip in
   match nterm.strongest with
   | None ->
@@ -170,10 +175,11 @@ let nonterm_handler nterm ctrip to_prog build_wpc_proof =
           (fun expansion pflist ->
             List.cons
               (build_wpc_proof
-                  {
-                    context = ctrip.context;
-                    trip = { prog = to_prog expansion; post = trip.post };
-                  })
+                 {
+                   context = ctrip.context;
+                   trip = { prog = to_prog expansion; post = trip.post };
+                 }
+                 implies)
               pflist)
           (NonTerminal.expand nterm) []
       in
@@ -204,24 +210,23 @@ let nonterm_handler nterm ctrip to_prog build_wpc_proof =
           else
             raise
               (Bad_Strongest_Triple
-                  ( prog_tostr trip.prog,
-                    Printf.sprintf "[%s]"
-                      (String.concat "; "
+                 ( prog_tostr trip.prog,
+                   Printf.sprintf "[%s]"
+                     (String.concat "; "
                         (List.map
-                            (fun (a, b) ->
-                              Printf.sprintf "(%s, %s)" (var_tostr a)
-                                (var_tostr b))
-                            var_pairs_list)) )))
+                           (fun (a, b) ->
+                             Printf.sprintf "(%s, %s)" (var_tostr a)
+                               (var_tostr b))
+                           var_pairs_list)) )))
         (reassigned_vars trip.prog);
       (*Write x=z. *)
       let ghost_pre =
         List.fold_left
           (fun form (prog_var, ghost_var) ->
-            match (prog_var, ghost_var) with 
-              (TermVar p, TermVar g) -> Formula.And (form, Equals ((TVar p), (TVar g)))
-            | (BoolVar p, BoolVar g) -> Formula.And (form, Iff ((BVar p), (BVar g)))
-            | _ -> raise (Bad_Strongest_Triple ((prog_tostr trip.prog), ""))
-              )
+            match (prog_var, ghost_var) with
+            | TermVar p, TermVar g -> Formula.And (form, Equals (TVar p, TVar g))
+            | BoolVar p, BoolVar g -> Formula.And (form, Iff (BVar p, BVar g))
+            | _ -> raise (Bad_Strongest_Triple (prog_tostr trip.prog, "")))
           True var_pairs_list
       in
       (* Write the adapt precondition \forall y. Q_0[y/x][x/z] \rightarrow Q[y/x] *)
@@ -230,19 +235,26 @@ let nonterm_handler nterm ctrip to_prog build_wpc_proof =
       let adapted_pre_1, xyz_list =
         List.fold_left
           (fun (form, xyz_list) (prog_var, ghost_var) ->
-            let y = fresh_var_name (And (form, trip.post)) (List.map (fun (_,y,_) -> (var_tostr y)) xyz_list) in
+            let y =
+              fresh_var_name
+                (And (form, trip.post))
+                (List.map (fun (_, y, _) -> var_tostr y) xyz_list)
+            in
             match prog_var with
-              TermVar _ ->( subs form prog_var (Term (TVar (T y))), List.cons (prog_var, (TermVar (T y)), ghost_var) xyz_list )
-            | BoolVar _ ->( subs form prog_var (Boolean (BVar (B y))), List.cons (prog_var, (BoolVar (B y)), ghost_var) xyz_list )
-              )
+            | TermVar _ ->
+                ( subs form prog_var (Term (TVar (T y))),
+                  List.cons (prog_var, TermVar (T y), ghost_var) xyz_list )
+            | BoolVar _ ->
+                ( subs form prog_var (Boolean (BVar (B y))),
+                  List.cons (prog_var, BoolVar (B y), ghost_var) xyz_list ))
           (postc, []) var_pairs_list
       in
       (* Q_0[y/x][x/z] *)
       let adapted_pre_2 =
         List.fold_left
-          (fun form (x, _, z) -> 
-            match x with 
-              TermVar x -> subs form z (Term (TVar x))
+          (fun form (x, _, z) ->
+            match x with
+            | TermVar x -> subs form z (Term (TVar x))
             | BoolVar x -> subs form z (Boolean (BVar x)))
           adapted_pre_1 xyz_list
       in
@@ -251,10 +263,10 @@ let nonterm_handler nterm ctrip to_prog build_wpc_proof =
         Implies
           ( adapted_pre_2,
             List.fold_left
-              (fun form (x, y, _) -> 
-                match y with 
-                TermVar yv -> subs form x (Term (TVar yv))
-              | BoolVar yv -> subs form x (Boolean (BVar yv)))
+              (fun form (x, y, _) ->
+                match y with
+                | TermVar yv -> subs form x (Term (TVar yv))
+                | BoolVar yv -> subs form x (Boolean (BVar yv)))
               trip.post xyz_list )
       in
       (* \forall y. Q_0[y/x][x/z] \rightarrow Q[y/x] *)
@@ -291,7 +303,8 @@ let nonterm_handler nterm ctrip to_prog build_wpc_proof =
                   {
                     context = bigger_context;
                     trip = { prog = to_prog expansion; post = postc };
-                  })
+                  }
+                  implies)
               nterm.expansions
           in
           (* TODO - Improve T \land ... *)
@@ -328,7 +341,8 @@ let nonterm_handler nterm ctrip to_prog build_wpc_proof =
           the_proof_before_adapt )
 
 (* Gives proof and set of functions that check if all weakens passed *)
-let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
+let rec build_wpc_proof (ctrip : contextualized_triple_no_pre)
+    (implies : formula -> formula -> bool Lazy.t) =
   let trip = ctrip.trip in
   match trip.prog with
   | Numeric Zero ->
@@ -365,7 +379,7 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
             };
         }
   | Numeric (Plus (t1, t2)) ->
-      let fresh = (T (fresh_var_name trip.post [])) in
+      let fresh = T (fresh_var_name trip.post []) in
       let right_hyp =
         build_wpc_proof
           {
@@ -373,9 +387,12 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
             trip =
               {
                 prog = Numeric t2;
-                post = subs trip.post (TermVar ET) (Term (Plus (TVar fresh, TVar ET)));
+                post =
+                  subs trip.post (TermVar ET)
+                    (Term (Plus (TVar fresh, TVar ET)));
               };
           }
+          implies
       in
       let left_hyp =
         build_wpc_proof
@@ -389,6 +406,7 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
                     (Term (TVar ET));
               };
           }
+          implies
       in
       Plus
         ( {
@@ -409,6 +427,7 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
             context = ctrip.context;
             trip = { prog = Numeric n2; post = trip.post };
           }
+          implies
       in
       let then_hyp =
         build_wpc_proof
@@ -416,6 +435,7 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
             context = ctrip.context;
             trip = { prog = Numeric n1; post = trip.post };
           }
+          implies
       in
       let guard_hyp =
         build_wpc_proof
@@ -431,6 +451,7 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
                     );
               };
           }
+          implies
       in
       ITE
         ( {
@@ -446,7 +467,9 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
           then_hyp,
           else_hyp )
   | Numeric (NNTerm nterm) ->
-      nonterm_handler nterm ctrip (fun expression -> Numeric expression) build_wpc_proof
+      nonterm_handler nterm ctrip
+        (fun expression -> Numeric expression)
+        build_wpc_proof implies
   | Boolean True ->
       True
         {
@@ -480,9 +503,11 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
                 post = subs trip.post (BoolVar BT) (Boolean (Not (BVar BT)));
               };
           }
+          implies
       in
       let newPre =
-        subs (get_conclusion hyp).trip.pre (BoolVar BT) (Boolean (Not (BVar BT)))
+        subs (get_conclusion hyp).trip.pre (BoolVar BT)
+          (Boolean (Not (BVar BT)))
       in
       Not
         ( {
@@ -491,7 +516,7 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
           },
           hyp )
   | Boolean (And (b1, b2)) ->
-      let fresh = (B (fresh_var_name trip.post [])) in
+      let fresh = B (fresh_var_name trip.post []) in
       let right_hyp =
         build_wpc_proof
           {
@@ -499,9 +524,12 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
             trip =
               {
                 prog = Boolean b2;
-                post = subs trip.post (BoolVar BT) (Boolean (And (BVar fresh, BVar BT)));
+                post =
+                  subs trip.post (BoolVar BT)
+                    (Boolean (And (BVar fresh, BVar BT)));
               };
           }
+          implies
       in
       let left_hyp =
         build_wpc_proof
@@ -515,6 +543,7 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
                     (Boolean (BVar BT));
               };
           }
+          implies
       in
       And
         ( {
@@ -529,7 +558,7 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
           left_hyp,
           right_hyp )
   | Boolean (Or (b1, b2)) ->
-      let fresh = (B (fresh_var_name trip.post [])) in
+      let fresh = B (fresh_var_name trip.post []) in
       let right_hyp =
         build_wpc_proof
           {
@@ -537,9 +566,12 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
             trip =
               {
                 prog = Boolean b2;
-                post = subs trip.post (BoolVar BT) (Boolean (Or (BVar fresh, BVar BT)));
+                post =
+                  subs trip.post (BoolVar BT)
+                    (Boolean (Or (BVar fresh, BVar BT)));
               };
           }
+          implies
       in
       let left_hyp =
         build_wpc_proof
@@ -553,6 +585,7 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
                     (Boolean (BVar BT));
               };
           }
+          implies
       in
       Or
         ( {
@@ -567,7 +600,7 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
           left_hyp,
           right_hyp )
   | Boolean (Equals (n1, n2)) ->
-      let fresh = (T (fresh_var_name trip.post [])) in
+      let fresh = T (fresh_var_name trip.post []) in
       let right_hyp =
         build_wpc_proof
           {
@@ -576,9 +609,11 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
               {
                 prog = Numeric n2;
                 post =
-                  subs trip.post (BoolVar BT) (Boolean (Equals (TVar fresh, TVar ET)));
+                  subs trip.post (BoolVar BT)
+                    (Boolean (Equals (TVar fresh, TVar ET)));
               };
           }
+          implies
       in
       let left_hyp =
         build_wpc_proof
@@ -592,6 +627,7 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
                     (Term (TVar ET));
               };
           }
+          implies
       in
       Equals
         ( {
@@ -606,7 +642,7 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
           left_hyp,
           right_hyp )
   | Boolean (Less (n1, n2)) ->
-      let fresh = (T (fresh_var_name trip.post [])) in
+      let fresh = T (fresh_var_name trip.post []) in
       let right_hyp =
         build_wpc_proof
           {
@@ -614,9 +650,12 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
             trip =
               {
                 prog = Numeric n2;
-                post = subs trip.post (BoolVar BT) (Boolean (Less (TVar fresh, TVar ET)));
+                post =
+                  subs trip.post (BoolVar BT)
+                    (Boolean (Less (TVar fresh, TVar ET)));
               };
           }
+          implies
       in
       let left_hyp =
         build_wpc_proof
@@ -630,6 +669,7 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
                     (Term (TVar ET));
               };
           }
+          implies
       in
       Less
         ( {
@@ -644,7 +684,9 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
           left_hyp,
           right_hyp )
   | Boolean (BNTerm nterm) ->
-    nonterm_handler nterm ctrip (fun boolean -> Boolean boolean) build_wpc_proof
+      nonterm_handler nterm ctrip
+        (fun boolean -> Boolean boolean)
+        build_wpc_proof implies
   | Stmt (Assign (v, n)) ->
       let hyp =
         build_wpc_proof
@@ -656,6 +698,7 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
                 post = subs trip.post (TermVar (T v)) (Term (TVar ET));
               };
           }
+          implies
       in
       Assign
         ( {
@@ -675,6 +718,7 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
             context = ctrip.context;
             trip = { prog = Stmt s2; post = trip.post };
           }
+          implies
       in
       let left_hyp =
         build_wpc_proof
@@ -683,6 +727,7 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
             trip =
               { prog = Stmt s1; post = (get_conclusion right_hyp).trip.pre };
           }
+          implies
       in
       Seq
         ( {
@@ -703,6 +748,7 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
             context = ctrip.context;
             trip = { prog = Stmt s2; post = trip.post };
           }
+          implies
       in
       let then_hyp =
         build_wpc_proof
@@ -710,6 +756,7 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
             context = ctrip.context;
             trip = { prog = Stmt s1; post = trip.post };
           }
+          implies
       in
       let guard_hyp =
         build_wpc_proof
@@ -725,6 +772,7 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
                     );
               };
           }
+          implies
       in
       ITE
         ( {
@@ -743,6 +791,7 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
       let body_hyp =
         build_wpc_proof
           { context = ctrip.context; trip = { prog = Stmt s; post = inv } }
+          implies
       in
       let guard_hyp_raw =
         build_wpc_proof
@@ -760,6 +809,7 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
                         ) );
               };
           }
+          implies
       in
       While
         ( {
@@ -780,15 +830,23 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre) =
               implies True (get_conclusion guard_hyp_raw).trip.pre ),
           body_hyp )
   | Stmt (SNTerm nterm) ->
-    nonterm_handler nterm ctrip (fun statement -> Stmt statement) build_wpc_proof
+      nonterm_handler nterm ctrip
+        (fun statement -> Stmt statement)
+        build_wpc_proof implies
 
-
-let prove (trip : triple) =
+let prove (trip : triple) (mode : proofMode) =
+  let implies, hole_synth =
+    match mode with
+    | HOLE_SYNTH -> implicator_synth ()
+    | INVS_SPECIFIED -> implicator ()
+  in
   let strongest =
     build_wpc_proof
       { context = []; trip = { prog = trip.prog; post = trip.post } }
+      implies
   in
-  Weaken
-    ( { context = []; trip },
-      strongest,
-      implies trip.pre (get_conclusion strongest).trip.pre )
+  ( Weaken
+      ( { context = []; trip },
+        strongest,
+        implies trip.pre (get_conclusion strongest).trip.pre ),
+    hole_synth )

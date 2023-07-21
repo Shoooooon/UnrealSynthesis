@@ -27,7 +27,11 @@ type stmt =
   | While of boolean_exp * Formula.formula * stmt
   | SNTerm of stmt nonterminal
 
-module SNTS = Set.Make (struct type t = stmt nonterminal let compare = compare end)
+module SNTS = Set.Make (struct
+  type t = stmt nonterminal
+
+  let compare = compare
+end)
 
 type program = Numeric of numeric_exp | Boolean of boolean_exp | Stmt of stmt
 
@@ -73,12 +77,11 @@ let rec prog_tostr prog =
         (Formula.form_tostr inv) (prog_tostr (Stmt s))
   | Stmt (SNTerm nterm) -> to_str nterm
 
-
 (* Returns vars (as formula vars) whose values may be changed by any program in the set.
    This is good to have for the adapt rule. *)
-let rec reassigned_vars_helper prog examined=
+let rec reassigned_vars_helper prog examined =
   match prog with
-    Numeric _ -> VS.empty
+  | Numeric _ -> VS.empty
   | Boolean _ -> VS.empty
   | Stmt (Assign (v, _)) -> VS.singleton (TermVar (T v))
   (* | Stmt (Assign (_, _)) -> VS.empty *)
@@ -91,6 +94,17 @@ let rec reassigned_vars_helper prog examined=
         (reassigned_vars_helper (Stmt s1) examined)
         (reassigned_vars_helper (Stmt s2) examined)
   | Stmt (While (_, _, s)) -> reassigned_vars_helper (Stmt s) examined
-  | Stmt (SNTerm n) -> if (SNTS.mem n examined) then VS.empty else (List.fold_left (fun a b -> VS.union a b) VS.empty (List.map (fun expansion -> reassigned_vars_helper (Stmt expansion) (SNTS.add n examined)) n.expansions))
+  | Stmt (SNTerm n) ->
+      if SNTS.mem n examined then VS.empty
+      else
+        List.fold_left
+          (fun a b -> VS.union a b)
+          VS.empty
+          (List.map
+             (fun expansion ->
+               reassigned_vars_helper (Stmt expansion) (SNTS.add n examined))
+             n.expansions)
 
-let reassigned_vars prog = VS.add (TermVar ET) (VS.add (BoolVar BT) (reassigned_vars_helper prog SNTS.empty))
+let reassigned_vars prog =
+  VS.add (TermVar ET)
+    (VS.add (BoolVar BT) (reassigned_vars_helper prog SNTS.empty))

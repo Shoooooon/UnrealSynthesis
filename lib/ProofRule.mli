@@ -1,6 +1,8 @@
 open Formula
 open Program
 
+type proofMode = HOLE_SYNTH | INVS_SPECIFIED
+
 (* Represents a complete UL triple *)
 type triple = { pre : formula; prog : program; post : formula }
 
@@ -13,5 +15,5 @@ type ruleApp
 (* Given a proof, converts it to a string *)
 val ruleApp_tostr : ruleApp -> string
 
-(* Given a UL triple, reutrns a proof of the triple *)
-val prove : triple -> ruleApp
+(* Given a UL triple and a mode indicating whether holes are present in the proof, reutrns a proof of the triple *)
+val prove : triple -> proofMode -> ruleApp * (unit -> string)
