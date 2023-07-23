@@ -4,6 +4,7 @@ type variable = BoolVar of bool_var | TermVar of term_var
 
 (* Necessary to support set functor. *)
 type t = variable
+
 let compare = compare
 
 let var_tostr var =

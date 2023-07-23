@@ -838,7 +838,7 @@ let prove (trip : triple) (mode : proofMode) =
   let implies, hole_synth =
     match mode with
     | HOLE_SYNTH -> implicator_synth ()
-    | INVS_SPECIFIED -> implicator ()
+    | INVS_SPECIFIED -> implicator_synth ()
   in
   let strongest =
     build_wpc_proof

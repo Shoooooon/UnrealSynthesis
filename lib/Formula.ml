@@ -159,7 +159,8 @@ let fresh_var_name form exclude_set =
 
 let rec to_smt_helper_term term =
   match term with
-  | Int i -> Printf.sprintf "%d" i
+  | Int i ->
+      if i < 0 then Printf.sprintf "(- %d)" (-1 * i) else Printf.sprintf "%d" i
   | TVar v -> var_tostr (TermVar v)
   | Plus (t1, t2) ->
       Printf.sprintf "(+ %s %s)" (to_smt_helper_term t1) (to_smt_helper_term t2)
@@ -255,6 +256,22 @@ let to_negated_smt form name =
        (free_vars form VS.empty) "")
     (to_smt_helper form)
 
+let rec has_holes form =
+  match form with
+  | True -> false
+  | False -> false
+  | BVar _ -> false
+  | And (l, r) -> has_holes l || has_holes r
+  | Or (l, r) -> has_holes l || has_holes r
+  | Not _ -> false
+  | Implies (l, r) -> has_holes l || has_holes r
+  | Equals (_, _) -> false
+  | Less (_, _) -> false
+  | Iff (l, r) -> has_holes l || has_holes r
+  | Exists (_, body) -> has_holes body
+  | Forall (_, body) -> has_holes body
+  | Hole (_, _) -> true
+
 let rec get_holes form =
   match form with
   | True -> []
@@ -277,10 +294,9 @@ type file_pair = { name_num : int; form : formula }
 
 (* Returns a function that can be used to check implication.
    Such a function must take a hyp:Formula and conclusion:Formula and return a bool lazy.*)
-let implicator () =
+let no_hole_implicator () =
   let file_logger = ref [] and file_counter = ref 0 in
-  let synthesize_hole_values () = "" in
-  let implies hyp conc =
+  let no_hole_implies hyp conc =
     (* Write SMT2 File *)
     (* let filename_map character =
          match character with
@@ -350,137 +366,158 @@ let implicator () =
          let f_channel = open_in (Printf.sprintf "%s.out" filename_pref) in
          input_line f_channel = "unsat")
   in
-  (implies, synthesize_hole_values)
+  no_hole_implies
 
 (* Returns a function that can be used to check implication and a function to synthesize solutions to holes.
    Such an implication checking function must take a hyp:Formula and conclusion:Formula and return a bool lazy.
    The synthesis function expects no inputs, as they are stored in a persistent context carried along with the returned functions.*)
-(* TODO: Consider the case where there are no holes.
-   Minor issues writing negative ints, but doesn't really matter.*)
+(* TODO: Minor issues writing negative ints, but doesn't really matter.*)
 let implicator_synth () =
   (* Create persistent context to track synthesis constraints. *)
   let constraint_logger = ref []
   and (synth_mapper : string option ref) = ref None
   and file_counter = ref 0
-  and has_solutions = ref None in
-  let synthesize_hole_values () =
-    match !synth_mapper with
-    | Some s -> s
-    | None -> (
-        (* Find distinct holes and rename vars (to write synth-invs later). Also set the synth-mapper.*)
-        let hole_list =
-          List.fold_left
-            (fun list aconstraint ->
-              List.append list
-                (List.filter
-                   (fun (s1, _) -> List.for_all (fun (s2, _) -> s1 <> s2) list)
-                   (get_holes aconstraint)))
-            [] !constraint_logger
-        in
-        let i = ref 0 in
-        let hole_list =
-          List.map
-            (fun (s, vl) ->
-              ( s,
-                List.map
-                  (fun v ->
-                    match v with
-                    | Term _ ->
-                        i := !i + 1;
-                        TermVar (T (Printf.sprintf "a_%d" !i))
-                    | Boolean _ ->
-                        i := !i + 1;
-                        BoolVar (B (Printf.sprintf "a_%d" !i)))
-                  vl ))
-            hole_list
-        in
-        (* Assemble .sy file *)
-        (* Make file *)
-        while Sys.file_exists (Printf.sprintf "Synthesis%d.sy" !file_counter) do
-          file_counter := !file_counter + 1
-        done;
-        let filename_pref = Printf.sprintf "Synthesis%d" !file_counter in
-        (* Set up the file and record in the structure. *)
-        let oc = open_out (Printf.sprintf "%s.sy" filename_pref) in
-        Printf.fprintf oc "(set-logic LIA)\n\n";
-        (* Declare free variables *)
-        let f_vars =
-          List.fold_left
-            (fun set aconstraint ->
-              VS.union set (free_vars aconstraint VS.empty))
-            VS.empty !constraint_logger
-        in
-        Printf.fprintf oc "%s\n"
-          (VS.fold
-             (fun var str ->
-               match var with
-               | BoolVar _ ->
-                   Printf.sprintf "%s(declare-var %s Bool)\n" str
-                     (var_tostr var)
-               | TermVar _ ->
-                   Printf.sprintf "%s(declare-var %s Int)\n" str (var_tostr var))
-             f_vars "");
-        (* Declare Holes to synthesize *)
-        Printf.fprintf oc "%s\n"
-          (String.concat "\n"
-             (List.map
-                (fun (s, vl) ->
-                  Printf.sprintf "(synth-inv %s (%s))" s
-                    (String.concat " "
-                       (List.map
-                          (fun var ->
-                            match var with
-                            | BoolVar _ ->
-                                Printf.sprintf "(%s Bool)" (var_tostr var)
-                            | TermVar _ ->
-                                Printf.sprintf "(%s Int)" (var_tostr var))
-                          vl)))
-                hole_list));
-        (* Write constraints. *)
-        Printf.fprintf oc "%s\n"
-          (String.concat "\n"
-             (List.map
-                (fun aconstraint ->
-                  Printf.sprintf "(constraint %s)" (to_smt_helper aconstraint))
-                !constraint_logger));
+  and has_solutions = ref None
+  and no_hole_implies = no_hole_implicator () in
+  let synthesize_hole_values =
+    lazy
+      (match !synth_mapper with
+      | Some s -> s
+      | None -> (
+          (* Find distinct holes and rename vars (to write synth-invs later). Also set the synth-mapper.*)
+          let hole_list =
+            List.fold_left
+              (fun list (name, vl) ->
+                if List.exists (fun (s, _) -> String.equal name s) list then
+                  list
+                else List.cons (name, vl) list)
+              []
+              (List.flatten
+                 (List.map
+                    (fun aconstraint -> get_holes aconstraint)
+                    !constraint_logger))
+          in
+          let i = ref 0 in
+          let hole_list =
+            List.map
+              (fun (s, vl) ->
+                ( s,
+                  List.map
+                    (fun v ->
+                      match v with
+                      | Term _ ->
+                          i := !i + 1;
+                          TermVar (T (Printf.sprintf "a_%d" !i))
+                      | Boolean _ ->
+                          i := !i + 1;
+                          BoolVar (B (Printf.sprintf "a_%d" !i)))
+                    vl ))
+              hole_list
+          in
+          (* Assemble .sy file *)
+          (* Make file *)
+          while
+            Sys.file_exists (Printf.sprintf "Synthesis%d.sy" !file_counter)
+          do
+            file_counter := !file_counter + 1
+          done;
+          let filename_pref = Printf.sprintf "Synthesis%d" !file_counter in
+          (* Set up the file and record in the structure. *)
+          let oc = open_out (Printf.sprintf "%s.sy" filename_pref) in
+          Printf.fprintf oc "(set-logic LIA)\n\n";
+          (* Declare free variables *)
+          let f_vars =
+            List.fold_left
+              (fun set aconstraint ->
+                VS.union set (free_vars aconstraint VS.empty))
+              VS.empty !constraint_logger
+          in
+          Printf.fprintf oc "%s\n"
+            (VS.fold
+               (fun var str ->
+                 match var with
+                 | BoolVar _ ->
+                     Printf.sprintf "%s(declare-var %s Bool)\n" str
+                       (var_tostr var)
+                 | TermVar _ ->
+                     Printf.sprintf "%s(declare-var %s Int)\n" str
+                       (var_tostr var))
+               f_vars "");
+          (* Declare Holes to synthesize *)
+          Printf.fprintf oc "%s\n"
+            (String.concat "\n"
+               (List.map
+                  (fun (s, vl) ->
+                    Printf.sprintf "(synth-inv %s (%s))" s
+                      (String.concat " "
+                         (List.map
+                            (fun var ->
+                              match var with
+                              | BoolVar _ ->
+                                  Printf.sprintf "(%s Bool)" (var_tostr var)
+                              | TermVar _ ->
+                                  Printf.sprintf "(%s Int)" (var_tostr var))
+                            vl)))
+                  hole_list));
+          (* Write constraints. *)
+          Printf.fprintf oc "%s\n"
+            (String.concat "\n"
+               (List.map
+                  (fun aconstraint ->
+                    Printf.sprintf "(constraint %s)" (to_smt_helper aconstraint))
+                  !constraint_logger));
 
-        Printf.fprintf oc "(check-synth)";
-        close_out oc;
+          Printf.fprintf oc "(check-synth)";
+          close_out oc;
 
-        (* Dispatch synthesis to solver *)
-        (* Fork and exec a query *)
-        (let kid_pid = Unix.fork () in
-         if kid_pid = 0 then (
-           (* Run synthesis via cvc5 *)
-           let fd =
-             Unix.openfile
-               (Printf.sprintf "%s.out" filename_pref)
-               [ O_CREAT; O_WRONLY ] 0
-           in
-           Unix.dup2 fd Unix.stdout;
-           Unix.execvp "cvc5"
-             (Array.of_list [ "cvc5"; Printf.sprintf "%s.sy" filename_pref ])
-           (* Wait. If can't synth, then record no solutions.
-               Else, record existenct of a solution, store solution, and return it as string (for now).
-               TODO: Parse string so a mapping is returned instead; the contents of the mapping can be subbed intop the proof. *))
-         else if Unix.waitpid [] kid_pid <> (kid_pid, WEXITED 0) then
-           has_solutions := Some false
-         else
-           let output = Arg.read_arg (Printf.sprintf "%s.out" filename_pref) in
-           has_solutions := Some (Array.get output 0 = "(");
-           synth_mapper := Some (String.concat "\n" (Array.to_list output)));
-        (* Store and return the contents of synth_mapper. *)
-        match !synth_mapper with None -> "FAILED" | Some s -> s)
+          (* Dispatch synthesis to solver *)
+          (* Fork and exec a query *)
+          (let kid_pid = Unix.fork () in
+           if kid_pid = 0 then (
+             (* Run synthesis via cvc5 *)
+             let fd =
+               Unix.openfile
+                 (Printf.sprintf "%s.out" filename_pref)
+                 [ O_CREAT; O_WRONLY ] 0
+             in
+             Unix.dup2 fd Unix.stdout;
+             Unix.execvp "cvc5"
+               (Array.of_list [ "cvc5"; Printf.sprintf "%s.sy" filename_pref ])
+             (* Wait. If can't synth, then record no solutions.
+                 Else, record existenct of a solution, store solution, and return it as string (for now).
+                 TODO: Parse string so a mapping is returned instead; the contents of the mapping can be subbed intop the proof. *))
+           else if Unix.waitpid [] kid_pid <> (kid_pid, WEXITED 0) then
+             has_solutions := Some false
+           else
+             let output =
+               Arg.read_arg (Printf.sprintf "%s.out" filename_pref)
+             in
+             has_solutions := Some (Array.get output 0 = "(");
+             synth_mapper :=
+               Some
+                 (String.concat "\n"
+                    (Array.to_list
+                       (Array.sub output 1 (Array.length output - 2))))
+             (* let ctx = (Z3.mk_context []) in
+                Printf.printf "%s" (String.concat "\n" (Array.to_list (Array.sub output 1 ((Array.length output) - 2))));
+                (Array.iter
+                (fun fun -> Printf.printf "%s" (Z3.AST.ASTVector.to_string (Z3.SMT.parse_smtlib2_string ctx (("(assert true)")) [] [] [] [])))
+                (Array.sub output 1 ((Array.length output) - 2))) *));
+          (* Store and return the contents of synth_mapper. *)
+          match !synth_mapper with None -> "FAILED" | Some s -> s))
   in
   let implies hyp conc =
-    (* Add the constraint to our list *)
-    constraint_logger := List.cons (Implies (hyp, conc)) !constraint_logger;
-    lazy
-      (match !has_solutions with
-      | None -> (
-          ignore (synthesize_hole_values ());
-          match !has_solutions with None -> false | Some s -> s)
-      | Some s -> s)
+    (* If there are no holes, discharge separately. *)
+    if not (has_holes (Implies (hyp, conc))) then no_hole_implies hyp conc
+    else (
+      (* If holes are present, then add the constraint to our list *)
+      constraint_logger := List.cons (Implies (hyp, conc)) !constraint_logger;
+      lazy
+        (match !has_solutions with
+        | None -> (
+            ignore (Lazy.force synthesize_hole_values);
+            match !has_solutions with None -> false | Some s -> s)
+        | Some s -> s))
   in
 
   (implies, synthesize_hole_values)
