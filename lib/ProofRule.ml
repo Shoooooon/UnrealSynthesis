@@ -1,7 +1,8 @@
-open Formula
-open Variable
-open Program
-open NonTerminal
+open Logic.Formula
+open Implications
+open Logic.Variable
+open Programs.Program
+open Programs.NonTerminal
 
 exception Bad_Strongest_Triple of string * string
 
@@ -181,7 +182,7 @@ let nonterm_handler nterm ctrip to_prog
                  }
                  implies)
               pflist)
-          (NonTerminal.expand nterm) []
+          (Programs.NonTerminal.expand nterm) []
       in
       (* Assemble the grmdisj proof *)
       GrmDisj
@@ -193,7 +194,7 @@ let nonterm_handler nterm ctrip to_prog
                   List.fold_left
                     (fun form hypothesis ->
                       (* "T \land" Could be better *)
-                      Formula.And (form, (get_conclusion hypothesis).trip.pre))
+                      Logic.Formula.And (form, (get_conclusion hypothesis).trip.pre))
                     True hypotheses;
                 prog = trip.prog;
                 post = trip.post;
@@ -224,8 +225,8 @@ let nonterm_handler nterm ctrip to_prog
         List.fold_left
           (fun form (prog_var, ghost_var) ->
             match (prog_var, ghost_var) with
-            | TermVar p, TermVar g -> Formula.And (form, Equals (TVar p, TVar g))
-            | BoolVar p, BoolVar g -> Formula.And (form, Iff (BVar p, BVar g))
+            | TermVar p, TermVar g -> Logic.Formula.And (form, Equals (TVar p, TVar g))
+            | BoolVar p, BoolVar g -> Logic.Formula.And (form, Iff (BVar p, BVar g))
             | _ -> raise (Bad_Strongest_Triple (prog_tostr trip.prog, "")))
           True var_pairs_list
       in
@@ -317,7 +318,7 @@ let nonterm_handler nterm ctrip to_prog
                       pre =
                         List.fold_left
                           (fun form pf ->
-                            Formula.And (form, (get_conclusion pf).trip.pre))
+                            Logic.Formula.And (form, (get_conclusion pf).trip.pre))
                           True hp_proofs;
                       prog = trip.prog;
                       post = postc;
@@ -834,8 +835,112 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre)
         (fun statement -> Stmt statement)
         build_wpc_proof implies
 
+(* Substitutes holes for formulae. *)
+let plug_holes_trip (trip : triple)
+    (hole_map : ((string * variable list) * formula) list) =
+  match trip.prog with
+  | Numeric (NNTerm n) ->
+      {
+        pre = sub_holes trip.pre hole_map;
+        prog = Numeric (NNTerm (sub_hole_nterm n hole_map));
+        post = sub_holes trip.post hole_map;
+      }
+  | Boolean (BNTerm n) ->
+      {
+        pre = sub_holes trip.pre hole_map;
+        prog = Boolean (BNTerm (sub_hole_nterm n hole_map));
+        post = sub_holes trip.post hole_map;
+      }
+  | Stmt (SNTerm n) ->
+      {
+        pre = sub_holes trip.pre hole_map;
+        prog = Stmt (SNTerm (sub_hole_nterm n hole_map));
+        post = sub_holes trip.post hole_map;
+      }
+  | _ ->
+      {
+        pre = sub_holes trip.pre hole_map;
+        prog = trip.prog;
+        post = sub_holes trip.post hole_map;
+      }
+
+let plug_holes_ctrip (ctrip : contextualized_triple)
+    (hole_map : ((string * variable list) * formula) list) :
+    contextualized_triple =
+  {
+    context = List.map (fun trip -> plug_holes_trip trip hole_map) ctrip.context;
+    trip = plug_holes_trip ctrip.trip hole_map;
+  }
+
+let rec plug_holes (rule : ruleApp)
+    (hole_map : ((string * variable list) * formula) list) =
+  match rule with
+  | Zero ctrip -> Zero (plug_holes_ctrip ctrip hole_map)
+  | One ctrip -> One (plug_holes_ctrip ctrip hole_map)
+  | True ctrip -> True (plug_holes_ctrip ctrip hole_map)
+  | False ctrip -> False (plug_holes_ctrip ctrip hole_map)
+  | Var ctrip -> Var (plug_holes_ctrip ctrip hole_map)
+  | Not (ctrip, pf) ->
+      Not (plug_holes_ctrip ctrip hole_map, plug_holes pf hole_map)
+  | Plus (ctrip, lpf, rpf) ->
+      Plus
+        ( plug_holes_ctrip ctrip hole_map,
+          plug_holes lpf hole_map,
+          plug_holes rpf hole_map )
+  | And (ctrip, lpf, rpf) ->
+      And
+        ( plug_holes_ctrip ctrip hole_map,
+          plug_holes lpf hole_map,
+          plug_holes rpf hole_map )
+  | Or (ctrip, lpf, rpf) ->
+      Or
+        ( plug_holes_ctrip ctrip hole_map,
+          plug_holes lpf hole_map,
+          plug_holes rpf hole_map )
+  | Equals (ctrip, lpf, rpf) ->
+      Equals
+        ( plug_holes_ctrip ctrip hole_map,
+          plug_holes lpf hole_map,
+          plug_holes rpf hole_map )
+  | Less (ctrip, lpf, rpf) ->
+      Less
+        ( plug_holes_ctrip ctrip hole_map,
+          plug_holes lpf hole_map,
+          plug_holes rpf hole_map )
+  | Assign (ctrip, pf) ->
+      Assign (plug_holes_ctrip ctrip hole_map, plug_holes pf hole_map)
+  | Seq (ctrip, lpf, rpf) ->
+      Seq
+        ( plug_holes_ctrip ctrip hole_map,
+          plug_holes lpf hole_map,
+          plug_holes rpf hole_map )
+  | ITE (ctrip, branch_pf, then_pf, else_pf) ->
+      ITE
+        ( plug_holes_ctrip ctrip hole_map,
+          plug_holes branch_pf hole_map,
+          plug_holes then_pf hole_map,
+          plug_holes else_pf hole_map )
+  | While (ctrip, guard_pf, body_pf) ->
+      While
+        ( plug_holes_ctrip ctrip hole_map,
+          plug_holes guard_pf hole_map,
+          plug_holes body_pf hole_map )
+  | Weaken (ctrip, pf, truth) ->
+      Weaken (plug_holes_ctrip ctrip hole_map, plug_holes pf hole_map, truth)
+  | GrmDisj (ctrip, pfs) ->
+      GrmDisj
+        ( plug_holes_ctrip ctrip hole_map,
+          List.map (fun pf -> plug_holes pf hole_map) pfs )
+  | ApplyHP ctrip -> ApplyHP (plug_holes_ctrip ctrip hole_map)
+  | HP (ctrip, pfs) ->
+      HP
+        ( plug_holes_ctrip ctrip hole_map,
+          List.map (fun pf -> plug_holes pf hole_map) pfs )
+  | Adapt (ctrip, pf) ->
+      Adapt (plug_holes_ctrip ctrip hole_map, plug_holes pf hole_map)
+
 let prove (trip : triple) (mode : proofMode) =
-  let implies, hole_synth =
+  let implies, hole_map =
     match mode with
     | HOLE_SYNTH -> implicator_synth ()
     | INVS_SPECIFIED -> implicator_synth ()
@@ -845,8 +950,10 @@ let prove (trip : triple) (mode : proofMode) =
       { context = []; trip = { prog = trip.prog; post = trip.post } }
       implies
   in
-  ( Weaken
+  let full_pf =
+    Weaken
       ( { context = []; trip },
         strongest,
-        implies trip.pre (get_conclusion strongest).trip.pre ),
-    hole_synth )
+        implies trip.pre (get_conclusion strongest).trip.pre )
+  in
+  plug_holes full_pf (Lazy.force hole_map)

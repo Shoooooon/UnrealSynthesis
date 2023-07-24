@@ -1,5 +1,5 @@
-open Formula
-open Program
+open Logic.Formula
+open Programs.Program
 
 type proofMode = HOLE_SYNTH | INVS_SPECIFIED
 
@@ -16,4 +16,4 @@ type ruleApp
 val ruleApp_tostr : ruleApp -> string
 
 (* Given a UL triple and a mode indicating whether holes are present in the proof, reutrns a proof of the triple *)
-val prove : triple -> proofMode -> ruleApp * string Lazy.t
+val prove : triple -> proofMode -> ruleApp

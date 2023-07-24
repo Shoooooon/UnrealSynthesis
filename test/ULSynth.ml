@@ -1,20 +1,17 @@
-open ULSynth.Formula
-open ULSynth.Program
+open Logic.Formula
+open Programs.Program
 open ULSynth.ProofRule
-open ULSynth.NonTerminal
+open Programs.NonTerminal
 
 let check_proof_no_hole trip expected =
-  let pf, _ = prove trip INVS_SPECIFIED in
+  let pf = prove trip INVS_SPECIFIED in
   let a = ruleApp_tostr pf in
   if not (compare a expected = 0) then print_endline a
 
-let check_proof_with_hole trip expected_pf expected_synth =
-  let pf, synth = prove trip HOLE_SYNTH in
-  let pf_str = ruleApp_tostr pf and synth_str = Lazy.force synth in
-  if not (compare pf_str expected_pf = 0 && compare synth_str expected_synth = 0)
-  then (
-    print_endline pf_str;
-    print_endline synth_str)
+let check_proof_with_hole trip expected_pf =
+  let pf = prove trip HOLE_SYNTH in
+  let pf_str = ruleApp_tostr pf in
+  if not (compare pf_str expected_pf = 0) then print_endline pf_str
 
 let test_axiom =
   check_proof_no_hole
@@ -900,71 +897,75 @@ let test_rec_nonterm_with_hole =
       prog = Boolean (BNTerm b);
       post = BVar BT;
     }
-    "Var: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(hole (b_t, \
-     x))] {(hole (b_t, x))}] |- {(hole ((x == 1), x))} x {(hole ((e_t == 1), \
-     x))}\n\
-     One: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(hole (b_t, \
-     x))] {(hole (b_t, x))}] |- {(hole ((fresh1 == 1), x))} 1 {(hole ((fresh1 \
-     == e_t), x))}\n\
-     Equals: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(hole (b_t, \
-     x))] {(hole (b_t, x))}] |- {(hole ((x == 1), x))} x {(hole ((e_t == 1), \
-     x))}, [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(hole (b_t, \
-     x))] {(hole (b_t, x))}] |- {(hole ((fresh1 == 1), x))} 1 {(hole ((fresh1 \
-     == e_t), x))} -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B \
-     MGF=(hole (b_t, x))] {(hole (b_t, x))}] |- {(hole ((x == 1), x))} (x = 1) \
-     {(hole (b_t, x))}\n\
-     ApplyHP: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(hole \
-     (b_t, x))] {(hole (b_t, x))}] |- {((T && (e_t == e_t_2)) && (b_t <-> \
-     b_t_2))} [B MGF=(hole (b_t, x))] {(hole (b_t, x))}\n\
-     Adapt: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(hole (b_t, \
-     x))] {(hole (b_t, x))}] |- {((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} \
-     [B MGF=(hole (b_t, x))] {(hole (b_t, x))} -> [{((T && (e_t == e_t_2)) && \
-     (b_t <-> b_t_2))} [B MGF=(hole (b_t, x))] {(hole (b_t, x))}] |- {((Forall \
-     fresh1). ((Forall fresh2). ((hole (fresh2, x)) => (hole ((fresh2 || (x == \
-     0)), x)))))} [B MGF=(hole (b_t, x))] {(hole ((b_t || (x == 0)), x))}\n\
-     Var: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(hole (b_t, \
-     x))] {(hole (b_t, x))}] |- {(hole ((fresh1 || (x == 0)), x))} x {(hole \
-     ((fresh1 || (e_t == 0)), x))}\n\
-     Zero: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(hole (b_t, \
-     x))] {(hole (b_t, x))}] |- {(hole ((fresh1 || (fresh2 == 0)), x))} 0 \
-     {(hole ((fresh1 || (fresh2 == e_t)), x))}\n\
-     Equals: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(hole (b_t, \
-     x))] {(hole (b_t, x))}] |- {(hole ((fresh1 || (x == 0)), x))} x {(hole \
-     ((fresh1 || (e_t == 0)), x))}, [{((T && (e_t == e_t_2)) && (b_t <-> \
-     b_t_2))} [B MGF=(hole (b_t, x))] {(hole (b_t, x))}] |- {(hole ((fresh1 || \
-     (fresh2 == 0)), x))} 0 {(hole ((fresh1 || (fresh2 == e_t)), x))} -> [{((T \
-     && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(hole (b_t, x))] {(hole \
-     (b_t, x))}] |- {(hole ((fresh1 || (x == 0)), x))} (x = 0) {(hole ((fresh1 \
-     || b_t), x))}\n\
-     Or: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(hole (b_t, x))] \
-     {(hole (b_t, x))}] |- {((Forall fresh1). ((Forall fresh2). ((hole \
-     (fresh2, x)) => (hole ((fresh2 || (x == 0)), x)))))} [B MGF=(hole (b_t, \
-     x))] {(hole ((b_t || (x == 0)), x))}, [{((T && (e_t == e_t_2)) && (b_t \
-     <-> b_t_2))} [B MGF=(hole (b_t, x))] {(hole (b_t, x))}] |- {(hole \
-     ((fresh1 || (x == 0)), x))} (x = 0) {(hole ((fresh1 || b_t), x))} -> \
-     [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(hole (b_t, x))] \
-     {(hole (b_t, x))}] |- {((Forall fresh1). ((Forall fresh2). ((hole \
-     (fresh2, x)) => (hole ((fresh2 || (x == 0)), x)))))} ([B MGF=(hole (b_t, \
-     x))] || (x = 0)) {(hole (b_t, x))}\n\
-     HP: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(hole (b_t, x))] \
-     {(hole (b_t, x))}] |- {(hole ((x == 1), x))} (x = 1) {(hole (b_t, x))}, \
-     [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(hole (b_t, x))] \
-     {(hole (b_t, x))}] |- {((Forall fresh1). ((Forall fresh2). ((hole \
-     (fresh2, x)) => (hole ((fresh2 || (x == 0)), x)))))} ([B MGF=(hole (b_t, \
-     x))] || (x = 0)) {(hole (b_t, x))} -> {((T && (hole ((x == 1), x))) && \
-     ((Forall fresh1). ((Forall fresh2). ((hole (fresh2, x)) => (hole ((fresh2 \
-     || (x == 0)), x))))))} [B MGF=(hole (b_t, x))] {(hole (b_t, x))}\n\
-     Weaken: {((T && (hole ((x == 1), x))) && ((Forall fresh1). ((Forall \
-     fresh2). ((hole (fresh2, x)) => (hole ((fresh2 || (x == 0)), x))))))} [B \
-     MGF=(hole (b_t, x))] {(hole (b_t, x))} -> {((T && (e_t == e_t_2)) && (b_t \
-     <-> b_t_2))} [B MGF=(hole (b_t, x))] {(hole (b_t, x))}\n\
-     Adapt: {((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(hole (b_t, \
-     x))] {(hole (b_t, x))} -> {((Forall fresh1). ((Forall fresh2). ((hole \
-     (fresh2, x)) => fresh2)))} [B MGF=(hole (b_t, x))] {b_t}\n\
-     Weaken: {((Forall fresh1). ((Forall fresh2). ((hole (fresh2, x)) => \
-     fresh2)))} [B MGF=(hole (b_t, x))] {b_t} -> {(x == 1)} [B MGF=(hole (b_t, \
-     x))] {b_t}"
-    "(define-fun hole ((a_1 Bool) (a_2 Int)) Bool (or (not (= 1 a_2)) a_1))";
+    "Var: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == x) \
+     || b_t)] {(!(1 == x) || b_t)}] |- {(!(1 == x) || (x == 1))} x {(!(1 == x) \
+     || (e_t == 1))}\n\
+     One: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == x) \
+     || b_t)] {(!(1 == x) || b_t)}] |- {(!(1 == x) || (fresh1 == 1))} 1 {(!(1 \
+     == x) || (fresh1 == e_t))}\n\
+     Equals: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == x) \
+     || b_t)] {(!(1 == x) || b_t)}] |- {(!(1 == x) || (x == 1))} x {(!(1 == x) \
+     || (e_t == 1))}, [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B \
+     MGF=(!(1 == x) || b_t)] {(!(1 == x) || b_t)}] |- {(!(1 == x) || (fresh1 \
+     == 1))} 1 {(!(1 == x) || (fresh1 == e_t))} -> [{((T && (e_t == e_t_2)) && \
+     (b_t <-> b_t_2))} [B MGF=(!(1 == x) || b_t)] {(!(1 == x) || b_t)}] |- \
+     {(!(1 == x) || (x == 1))} (x = 1) {(!(1 == x) || b_t)}\n\
+     ApplyHP: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == \
+     x) || b_t)] {(!(1 == x) || b_t)}] |- {((T && (e_t == e_t_2)) && (b_t <-> \
+     b_t_2))} [B MGF=(!(1 == x) || b_t)] {(!(1 == x) || b_t)}\n\
+     Adapt: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == x) || \
+     b_t)] {(!(1 == x) || b_t)}] |- {((T && (e_t == e_t_2)) && (b_t <-> \
+     b_t_2))} [B MGF=(!(1 == x) || b_t)] {(!(1 == x) || b_t)} -> [{((T && (e_t \
+     == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == x) || b_t)] {(!(1 == x) || \
+     b_t)}] |- {((Forall fresh1). ((Forall fresh2). ((!(1 == x) || fresh2) => \
+     (!(1 == x) || (fresh2 || (x == 0))))))} [B MGF=(!(1 == x) || b_t)] {(!(1 \
+     == x) || (b_t || (x == 0)))}\n\
+     Var: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == x) \
+     || b_t)] {(!(1 == x) || b_t)}] |- {(!(1 == x) || (fresh1 || (x == 0)))} x \
+     {(!(1 == x) || (fresh1 || (e_t == 0)))}\n\
+     Zero: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == x) \
+     || b_t)] {(!(1 == x) || b_t)}] |- {(!(1 == x) || (fresh1 || (fresh2 == \
+     0)))} 0 {(!(1 == x) || (fresh1 || (fresh2 == e_t)))}\n\
+     Equals: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == x) \
+     || b_t)] {(!(1 == x) || b_t)}] |- {(!(1 == x) || (fresh1 || (x == 0)))} x \
+     {(!(1 == x) || (fresh1 || (e_t == 0)))}, [{((T && (e_t == e_t_2)) && (b_t \
+     <-> b_t_2))} [B MGF=(!(1 == x) || b_t)] {(!(1 == x) || b_t)}] |- {(!(1 == \
+     x) || (fresh1 || (fresh2 == 0)))} 0 {(!(1 == x) || (fresh1 || (fresh2 == \
+     e_t)))} -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == \
+     x) || b_t)] {(!(1 == x) || b_t)}] |- {(!(1 == x) || (fresh1 || (x == \
+     0)))} (x = 0) {(!(1 == x) || (fresh1 || b_t))}\n\
+     Or: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == x) || \
+     b_t)] {(!(1 == x) || b_t)}] |- {((Forall fresh1). ((Forall fresh2). ((!(1 \
+     == x) || fresh2) => (!(1 == x) || (fresh2 || (x == 0))))))} [B MGF=(!(1 \
+     == x) || b_t)] {(!(1 == x) || (b_t || (x == 0)))}, [{((T && (e_t == \
+     e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == x) || b_t)] {(!(1 == x) || \
+     b_t)}] |- {(!(1 == x) || (fresh1 || (x == 0)))} (x = 0) {(!(1 == x) || \
+     (fresh1 || b_t))} -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B \
+     MGF=(!(1 == x) || b_t)] {(!(1 == x) || b_t)}] |- {((Forall fresh1). \
+     ((Forall fresh2). ((!(1 == x) || fresh2) => (!(1 == x) || (fresh2 || (x \
+     == 0))))))} ([B MGF=(hole (b_t, x))] || (x = 0)) {(!(1 == x) || b_t)}\n\
+     HP: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == x) || \
+     b_t)] {(!(1 == x) || b_t)}] |- {(!(1 == x) || (x == 1))} (x = 1) {(!(1 == \
+     x) || b_t)}, [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == \
+     x) || b_t)] {(!(1 == x) || b_t)}] |- {((Forall fresh1). ((Forall fresh2). \
+     ((!(1 == x) || fresh2) => (!(1 == x) || (fresh2 || (x == 0))))))} ([B \
+     MGF=(hole (b_t, x))] || (x = 0)) {(!(1 == x) || b_t)} -> {((T && (!(1 == \
+     x) || (x == 1))) && ((Forall fresh1). ((Forall fresh2). ((!(1 == x) || \
+     fresh2) => (!(1 == x) || (fresh2 || (x == 0)))))))} [B MGF=(!(1 == x) || \
+     b_t)] {(!(1 == x) || b_t)}\n\
+     Weaken: {((T && (!(1 == x) || (x == 1))) && ((Forall fresh1). ((Forall \
+     fresh2). ((!(1 == x) || fresh2) => (!(1 == x) || (fresh2 || (x == \
+     0)))))))} [B MGF=(!(1 == x) || b_t)] {(!(1 == x) || b_t)} -> {((T && (e_t \
+     == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == x) || b_t)] {(!(1 == x) || \
+     b_t)}\n\
+     Adapt: {((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == x) || \
+     b_t)] {(!(1 == x) || b_t)} -> {((Forall fresh1). ((Forall fresh2). ((!(1 \
+     == x) || fresh2) => fresh2)))} [B MGF=(!(1 == x) || b_t)] {b_t}\n\
+     Weaken: {((Forall fresh1). ((Forall fresh2). ((!(1 == x) || fresh2) => \
+     fresh2)))} [B MGF=(!(1 == x) || b_t)] {b_t} -> {(x == 1)} [B MGF=(!(1 == \
+     x) || b_t)] {b_t}";
+
+  (* "(define-fun hole ((a_1 Bool) (a_2 Int)) Bool (or (not (= 1 a_2)) a_1))" *)
 
   (* Statement + Numeric *)
   (* This proof I have not yet hand-checked. *)
@@ -1004,214 +1005,229 @@ let test_rec_nonterm_with_hole =
       prog = Stmt (SNTerm s);
       post = Less (Int (-1), TVar (T "x"));
     }
-    "One: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(n_hole \
-     (e_t))] {(n_hole (e_t))}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && \
-     (x == x_2))} [S MGF=(s_hole (x))] {(s_hole (x))}] |- {(n_hole (1))} 1 \
-     {(n_hole (e_t))}\n\
-     Zero: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(n_hole \
-     (e_t))] {(n_hole (e_t))}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && \
-     (x == x_2))} [S MGF=(s_hole (x))] {(s_hole (x))}] |- {((Forall fresh2). \
-     ((Forall fresh3). ((n_hole (fresh2)) => (n_hole ((0 + fresh2))))))} 0 \
-     {((Forall fresh2). ((Forall fresh3). ((n_hole (fresh2)) => (n_hole ((e_t \
-     + fresh2))))))}\n\
-     ApplyHP: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(n_hole \
-     (e_t))] {(n_hole (e_t))}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && \
-     (x == x_2))} [S MGF=(s_hole (x))] {(s_hole (x))}] |- {((T && (e_t == \
-     e_t_2)) && (b_t <-> b_t_2))} [N MGF=(n_hole (e_t))] {(n_hole (e_t))}\n\
-     Adapt: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(n_hole \
-     (e_t))] {(n_hole (e_t))}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && \
-     (x == x_2))} [S MGF=(s_hole (x))] {(s_hole (x))}] |- {((T && (e_t == \
-     e_t_2)) && (b_t <-> b_t_2))} [N MGF=(n_hole (e_t))] {(n_hole (e_t))} -> \
-     [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(n_hole (e_t))] \
-     {(n_hole (e_t))}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == \
-     x_2))} [S MGF=(s_hole (x))] {(s_hole (x))}] |- {((Forall fresh2). \
-     ((Forall fresh3). ((n_hole (fresh2)) => (n_hole ((fresh1 + fresh2))))))} \
-     [N MGF=(n_hole (e_t))] {(n_hole ((fresh1 + e_t)))}\n\
-     Plus: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(n_hole \
-     (e_t))] {(n_hole (e_t))}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && \
-     (x == x_2))} [S MGF=(s_hole (x))] {(s_hole (x))}] |- {((Forall fresh2). \
-     ((Forall fresh3). ((n_hole (fresh2)) => (n_hole ((0 + fresh2))))))} 0 \
-     {((Forall fresh2). ((Forall fresh3). ((n_hole (fresh2)) => (n_hole ((e_t \
-     + fresh2))))))}, [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N \
-     MGF=(n_hole (e_t))] {(n_hole (e_t))}, {(((T && (e_t == e_t_2)) && (b_t \
-     <-> b_t_2)) && (x == x_2))} [S MGF=(s_hole (x))] {(s_hole (x))}] |- \
-     {((Forall fresh2). ((Forall fresh3). ((n_hole (fresh2)) => (n_hole \
-     ((fresh1 + fresh2))))))} [N MGF=(n_hole (e_t))] {(n_hole ((fresh1 + \
-     e_t)))} -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(n_hole \
-     (e_t))] {(n_hole (e_t))}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && \
-     (x == x_2))} [S MGF=(s_hole (x))] {(s_hole (x))}] |- {((Forall fresh2). \
-     ((Forall fresh3). ((n_hole (fresh2)) => (n_hole ((0 + fresh2))))))} (0 + \
-     [N MGF=(n_hole (e_t))]) {(n_hole (e_t))}\n\
-     HP: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(n_hole (e_t))] \
-     {(n_hole (e_t))}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == \
-     x_2))} [S MGF=(s_hole (x))] {(s_hole (x))}] |- {(n_hole (1))} 1 {(n_hole \
-     (e_t))}, [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(n_hole \
-     (e_t))] {(n_hole (e_t))}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && \
-     (x == x_2))} [S MGF=(s_hole (x))] {(s_hole (x))}] |- {((Forall fresh2). \
-     ((Forall fresh3). ((n_hole (fresh2)) => (n_hole ((0 + fresh2))))))} (0 + \
-     [N MGF=(n_hole (e_t))]) {(n_hole (e_t))} -> [{(((T && (e_t == e_t_2)) && \
-     (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(s_hole (x))] {(s_hole (x))}] |- \
-     {((T && (n_hole (1))) && ((Forall fresh2). ((Forall fresh3). ((n_hole \
-     (fresh2)) => (n_hole ((0 + fresh2)))))))} [N MGF=(n_hole (e_t))] {(n_hole \
-     (e_t))}\n\
+    "One: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(e_t == 1)] \
+     {(e_t == 1)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == \
+     x_2))} [S MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))}] |- {(1 == \
+     1)} 1 {(e_t == 1)}\n\
+     Zero: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(e_t == 1)] \
+     {(e_t == 1)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == \
+     x_2))} [S MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))}] |- \
+     {((Forall fresh2). ((Forall fresh3). ((fresh2 == 1) => ((0 + fresh2) == \
+     1))))} 0 {((Forall fresh2). ((Forall fresh3). ((fresh2 == 1) => ((e_t + \
+     fresh2) == 1))))}\n\
+     ApplyHP: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(e_t == \
+     1)] {(e_t == 1)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == \
+     x_2))} [S MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))}] |- {((T && \
+     (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(e_t == 1)] {(e_t == 1)}\n\
+     Adapt: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(e_t == 1)] \
+     {(e_t == 1)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == \
+     x_2))} [S MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))}] |- {((T && \
+     (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(e_t == 1)] {(e_t == 1)} -> \
+     [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(e_t == 1)] {(e_t == \
+     1)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S \
+     MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))}] |- {((Forall fresh2). \
+     ((Forall fresh3). ((fresh2 == 1) => ((fresh1 + fresh2) == 1))))} [N \
+     MGF=(e_t == 1)] {((fresh1 + e_t) == 1)}\n\
+     Plus: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(e_t == 1)] \
+     {(e_t == 1)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == \
+     x_2))} [S MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))}] |- \
+     {((Forall fresh2). ((Forall fresh3). ((fresh2 == 1) => ((0 + fresh2) == \
+     1))))} 0 {((Forall fresh2). ((Forall fresh3). ((fresh2 == 1) => ((e_t + \
+     fresh2) == 1))))}, [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N \
+     MGF=(e_t == 1)] {(e_t == 1)}, {(((T && (e_t == e_t_2)) && (b_t <-> \
+     b_t_2)) && (x == x_2))} [S MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == \
+     x))}] |- {((Forall fresh2). ((Forall fresh3). ((fresh2 == 1) => ((fresh1 \
+     + fresh2) == 1))))} [N MGF=(e_t == 1)] {((fresh1 + e_t) == 1)} -> [{((T \
+     && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(e_t == 1)] {(e_t == 1)}, \
+     {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=((0 < \
+     x) || (0 == x))] {((0 < x) || (0 == x))}] |- {((Forall fresh2). ((Forall \
+     fresh3). ((fresh2 == 1) => ((0 + fresh2) == 1))))} (0 + [N MGF=(n_hole \
+     (e_t))]) {(e_t == 1)}\n\
+     HP: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(e_t == 1)] \
+     {(e_t == 1)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == \
+     x_2))} [S MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))}] |- {(1 == \
+     1)} 1 {(e_t == 1)}, [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N \
+     MGF=(e_t == 1)] {(e_t == 1)}, {(((T && (e_t == e_t_2)) && (b_t <-> \
+     b_t_2)) && (x == x_2))} [S MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == \
+     x))}] |- {((Forall fresh2). ((Forall fresh3). ((fresh2 == 1) => ((0 + \
+     fresh2) == 1))))} (0 + [N MGF=(n_hole (e_t))]) {(e_t == 1)} -> [{(((T && \
+     (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=((0 < x) || (0 \
+     == x))] {((0 < x) || (0 == x))}] |- {((T && (1 == 1)) && ((Forall \
+     fresh2). ((Forall fresh3). ((fresh2 == 1) => ((0 + fresh2) == 1)))))} [N \
+     MGF=(e_t == 1)] {(e_t == 1)}\n\
      Weaken: [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S \
-     MGF=(s_hole (x))] {(s_hole (x))}] |- {((T && (n_hole (1))) && ((Forall \
-     fresh2). ((Forall fresh3). ((n_hole (fresh2)) => (n_hole ((0 + \
-     fresh2)))))))} [N MGF=(n_hole (e_t))] {(n_hole (e_t))} -> [{(((T && (e_t \
-     == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(s_hole (x))] \
-     {(s_hole (x))}] |- {((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N \
-     MGF=(n_hole (e_t))] {(n_hole (e_t))}\n\
+     MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))}] |- {((T && (1 == 1)) \
+     && ((Forall fresh2). ((Forall fresh3). ((fresh2 == 1) => ((0 + fresh2) == \
+     1)))))} [N MGF=(e_t == 1)] {(e_t == 1)} -> [{(((T && (e_t == e_t_2)) && \
+     (b_t <-> b_t_2)) && (x == x_2))} [S MGF=((0 < x) || (0 == x))] {((0 < x) \
+     || (0 == x))}] |- {((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N \
+     MGF=(e_t == 1)] {(e_t == 1)}\n\
      Adapt: [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S \
-     MGF=(s_hole (x))] {(s_hole (x))}] |- {((T && (e_t == e_t_2)) && (b_t <-> \
-     b_t_2))} [N MGF=(n_hole (e_t))] {(n_hole (e_t))} -> [{(((T && (e_t == \
-     e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(s_hole (x))] {(s_hole \
-     (x))}] |- {((Forall fresh1). ((Forall fresh2). ((n_hole (fresh1)) => \
-     (s_hole (fresh1)))))} [N MGF=(n_hole (e_t))] {(s_hole (e_t))}\n\
+     MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))}] |- {((T && (e_t == \
+     e_t_2)) && (b_t <-> b_t_2))} [N MGF=(e_t == 1)] {(e_t == 1)} -> [{(((T && \
+     (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=((0 < x) || (0 \
+     == x))] {((0 < x) || (0 == x))}] |- {((Forall fresh1). ((Forall fresh2). \
+     ((fresh1 == 1) => ((0 < fresh1) || (0 == fresh1)))))} [N MGF=(e_t == 1)] \
+     {((0 < e_t) || (0 == e_t))}\n\
      Assign: [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S \
-     MGF=(s_hole (x))] {(s_hole (x))}] |- {((Forall fresh1). ((Forall fresh2). \
-     ((n_hole (fresh1)) => (s_hole (fresh1)))))} [N MGF=(n_hole (e_t))] \
-     {(s_hole (e_t))} -> [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x \
-     == x_2))} [S MGF=(s_hole (x))] {(s_hole (x))}] |- {((Forall fresh1). \
-     ((Forall fresh2). ((n_hole (fresh1)) => (s_hole (fresh1)))))} (x := [N \
-     MGF=(n_hole (e_t))]) {(s_hole (x))}\n\
+     MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))}] |- {((Forall fresh1). \
+     ((Forall fresh2). ((fresh1 == 1) => ((0 < fresh1) || (0 == fresh1)))))} \
+     [N MGF=(e_t == 1)] {((0 < e_t) || (0 == e_t))} -> [{(((T && (e_t == \
+     e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=((0 < x) || (0 == x))] \
+     {((0 < x) || (0 == x))}] |- {((Forall fresh1). ((Forall fresh2). ((fresh1 \
+     == 1) => ((0 < fresh1) || (0 == fresh1)))))} (x := [N MGF=(n_hole \
+     (e_t))]) {((0 < x) || (0 == x))}\n\
      ApplyHP: -> [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} \
-     [S MGF=(s_hole (x))] {(s_hole (x))}] |- {(((T && (e_t == e_t_2)) && (b_t \
-     <-> b_t_2)) && (x == x_2))} [S MGF=(s_hole (x))] {(s_hole (x))}\n\
+     [S MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))}] |- {(((T && (e_t \
+     == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=((0 < x) || (0 == \
+     x))] {((0 < x) || (0 == x))}\n\
      Adapt: [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S \
-     MGF=(s_hole (x))] {(s_hole (x))}] |- {(((T && (e_t == e_t_2)) && (b_t <-> \
-     b_t_2)) && (x == x_2))} [S MGF=(s_hole (x))] {(s_hole (x))} -> [{(((T && \
-     (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(s_hole (x))] \
-     {(s_hole (x))}] |- {((Forall fresh1). ((Forall fresh4). ((Forall fresh5). \
-     ((s_hole (fresh5)) => ((Forall fresh2). ((Forall fresh3). ((n_hole \
-     (fresh2)) => (s_hole ((fresh5 + fresh2))))))))))} [S MGF=(s_hole (x))] \
-     {((Forall fresh2). ((Forall fresh3). ((n_hole (fresh2)) => (s_hole ((x + \
-     fresh2))))))}\n\
+     MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))}] |- {(((T && (e_t == \
+     e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=((0 < x) || (0 == x))] \
+     {((0 < x) || (0 == x))} -> [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) \
+     && (x == x_2))} [S MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))}] |- \
+     {((Forall fresh1). ((Forall fresh4). ((Forall fresh5). (((0 < fresh5) || \
+     (0 == fresh5)) => ((Forall fresh2). ((Forall fresh3). ((fresh2 == 1) => \
+     ((0 < (fresh5 + fresh2)) || (0 == (fresh5 + fresh2))))))))))} [S MGF=((0 \
+     < x) || (0 == x))] {((Forall fresh2). ((Forall fresh3). ((fresh2 == 1) => \
+     ((0 < (x + fresh2)) || (0 == (x + fresh2))))))}\n\
      Var: -> [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S \
-     MGF=(s_hole (x))] {(s_hole (x))}] |- {((Forall fresh2). ((Forall fresh3). \
-     ((n_hole (fresh2)) => (s_hole ((x + fresh2))))))} x {((Forall fresh2). \
-     ((Forall fresh3). ((n_hole (fresh2)) => (s_hole ((e_t + fresh2))))))}\n\
-     One: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(n_hole \
-     (e_t))] {(n_hole (e_t))}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && \
-     (x == x_2))} [S MGF=(s_hole (x))] {(s_hole (x))}] |- {(n_hole (1))} 1 \
-     {(n_hole (e_t))}\n\
-     Zero: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(n_hole \
-     (e_t))] {(n_hole (e_t))}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && \
-     (x == x_2))} [S MGF=(s_hole (x))] {(s_hole (x))}] |- {((Forall fresh2). \
-     ((Forall fresh3). ((n_hole (fresh2)) => (n_hole ((0 + fresh2))))))} 0 \
-     {((Forall fresh2). ((Forall fresh3). ((n_hole (fresh2)) => (n_hole ((e_t \
-     + fresh2))))))}\n\
-     ApplyHP: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(n_hole \
-     (e_t))] {(n_hole (e_t))}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && \
-     (x == x_2))} [S MGF=(s_hole (x))] {(s_hole (x))}] |- {((T && (e_t == \
-     e_t_2)) && (b_t <-> b_t_2))} [N MGF=(n_hole (e_t))] {(n_hole (e_t))}\n\
-     Adapt: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(n_hole \
-     (e_t))] {(n_hole (e_t))}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && \
-     (x == x_2))} [S MGF=(s_hole (x))] {(s_hole (x))}] |- {((T && (e_t == \
-     e_t_2)) && (b_t <-> b_t_2))} [N MGF=(n_hole (e_t))] {(n_hole (e_t))} -> \
-     [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(n_hole (e_t))] \
-     {(n_hole (e_t))}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == \
-     x_2))} [S MGF=(s_hole (x))] {(s_hole (x))}] |- {((Forall fresh2). \
-     ((Forall fresh3). ((n_hole (fresh2)) => (n_hole ((fresh1 + fresh2))))))} \
-     [N MGF=(n_hole (e_t))] {(n_hole ((fresh1 + e_t)))}\n\
-     Plus: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(n_hole \
-     (e_t))] {(n_hole (e_t))}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && \
-     (x == x_2))} [S MGF=(s_hole (x))] {(s_hole (x))}] |- {((Forall fresh2). \
-     ((Forall fresh3). ((n_hole (fresh2)) => (n_hole ((0 + fresh2))))))} 0 \
-     {((Forall fresh2). ((Forall fresh3). ((n_hole (fresh2)) => (n_hole ((e_t \
-     + fresh2))))))}, [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N \
-     MGF=(n_hole (e_t))] {(n_hole (e_t))}, {(((T && (e_t == e_t_2)) && (b_t \
-     <-> b_t_2)) && (x == x_2))} [S MGF=(s_hole (x))] {(s_hole (x))}] |- \
-     {((Forall fresh2). ((Forall fresh3). ((n_hole (fresh2)) => (n_hole \
-     ((fresh1 + fresh2))))))} [N MGF=(n_hole (e_t))] {(n_hole ((fresh1 + \
-     e_t)))} -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(n_hole \
-     (e_t))] {(n_hole (e_t))}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && \
-     (x == x_2))} [S MGF=(s_hole (x))] {(s_hole (x))}] |- {((Forall fresh2). \
-     ((Forall fresh3). ((n_hole (fresh2)) => (n_hole ((0 + fresh2))))))} (0 + \
-     [N MGF=(n_hole (e_t))]) {(n_hole (e_t))}\n\
-     HP: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(n_hole (e_t))] \
-     {(n_hole (e_t))}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == \
-     x_2))} [S MGF=(s_hole (x))] {(s_hole (x))}] |- {(n_hole (1))} 1 {(n_hole \
-     (e_t))}, [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(n_hole \
-     (e_t))] {(n_hole (e_t))}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && \
-     (x == x_2))} [S MGF=(s_hole (x))] {(s_hole (x))}] |- {((Forall fresh2). \
-     ((Forall fresh3). ((n_hole (fresh2)) => (n_hole ((0 + fresh2))))))} (0 + \
-     [N MGF=(n_hole (e_t))]) {(n_hole (e_t))} -> [{(((T && (e_t == e_t_2)) && \
-     (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(s_hole (x))] {(s_hole (x))}] |- \
-     {((T && (n_hole (1))) && ((Forall fresh2). ((Forall fresh3). ((n_hole \
-     (fresh2)) => (n_hole ((0 + fresh2)))))))} [N MGF=(n_hole (e_t))] {(n_hole \
-     (e_t))}\n\
+     MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))}] |- {((Forall fresh2). \
+     ((Forall fresh3). ((fresh2 == 1) => ((0 < (x + fresh2)) || (0 == (x + \
+     fresh2))))))} x {((Forall fresh2). ((Forall fresh3). ((fresh2 == 1) => \
+     ((0 < (e_t + fresh2)) || (0 == (e_t + fresh2))))))}\n\
+     One: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(e_t == 1)] \
+     {(e_t == 1)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == \
+     x_2))} [S MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))}] |- {(1 == \
+     1)} 1 {(e_t == 1)}\n\
+     Zero: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(e_t == 1)] \
+     {(e_t == 1)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == \
+     x_2))} [S MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))}] |- \
+     {((Forall fresh2). ((Forall fresh3). ((fresh2 == 1) => ((0 + fresh2) == \
+     1))))} 0 {((Forall fresh2). ((Forall fresh3). ((fresh2 == 1) => ((e_t + \
+     fresh2) == 1))))}\n\
+     ApplyHP: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(e_t == \
+     1)] {(e_t == 1)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == \
+     x_2))} [S MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))}] |- {((T && \
+     (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(e_t == 1)] {(e_t == 1)}\n\
+     Adapt: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(e_t == 1)] \
+     {(e_t == 1)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == \
+     x_2))} [S MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))}] |- {((T && \
+     (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(e_t == 1)] {(e_t == 1)} -> \
+     [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(e_t == 1)] {(e_t == \
+     1)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S \
+     MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))}] |- {((Forall fresh2). \
+     ((Forall fresh3). ((fresh2 == 1) => ((fresh1 + fresh2) == 1))))} [N \
+     MGF=(e_t == 1)] {((fresh1 + e_t) == 1)}\n\
+     Plus: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(e_t == 1)] \
+     {(e_t == 1)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == \
+     x_2))} [S MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))}] |- \
+     {((Forall fresh2). ((Forall fresh3). ((fresh2 == 1) => ((0 + fresh2) == \
+     1))))} 0 {((Forall fresh2). ((Forall fresh3). ((fresh2 == 1) => ((e_t + \
+     fresh2) == 1))))}, [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N \
+     MGF=(e_t == 1)] {(e_t == 1)}, {(((T && (e_t == e_t_2)) && (b_t <-> \
+     b_t_2)) && (x == x_2))} [S MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == \
+     x))}] |- {((Forall fresh2). ((Forall fresh3). ((fresh2 == 1) => ((fresh1 \
+     + fresh2) == 1))))} [N MGF=(e_t == 1)] {((fresh1 + e_t) == 1)} -> [{((T \
+     && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(e_t == 1)] {(e_t == 1)}, \
+     {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=((0 < \
+     x) || (0 == x))] {((0 < x) || (0 == x))}] |- {((Forall fresh2). ((Forall \
+     fresh3). ((fresh2 == 1) => ((0 + fresh2) == 1))))} (0 + [N MGF=(n_hole \
+     (e_t))]) {(e_t == 1)}\n\
+     HP: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(e_t == 1)] \
+     {(e_t == 1)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == \
+     x_2))} [S MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))}] |- {(1 == \
+     1)} 1 {(e_t == 1)}, [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N \
+     MGF=(e_t == 1)] {(e_t == 1)}, {(((T && (e_t == e_t_2)) && (b_t <-> \
+     b_t_2)) && (x == x_2))} [S MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == \
+     x))}] |- {((Forall fresh2). ((Forall fresh3). ((fresh2 == 1) => ((0 + \
+     fresh2) == 1))))} (0 + [N MGF=(n_hole (e_t))]) {(e_t == 1)} -> [{(((T && \
+     (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=((0 < x) || (0 \
+     == x))] {((0 < x) || (0 == x))}] |- {((T && (1 == 1)) && ((Forall \
+     fresh2). ((Forall fresh3). ((fresh2 == 1) => ((0 + fresh2) == 1)))))} [N \
+     MGF=(e_t == 1)] {(e_t == 1)}\n\
      Weaken: [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S \
-     MGF=(s_hole (x))] {(s_hole (x))}] |- {((T && (n_hole (1))) && ((Forall \
-     fresh2). ((Forall fresh3). ((n_hole (fresh2)) => (n_hole ((0 + \
-     fresh2)))))))} [N MGF=(n_hole (e_t))] {(n_hole (e_t))} -> [{(((T && (e_t \
-     == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(s_hole (x))] \
-     {(s_hole (x))}] |- {((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N \
-     MGF=(n_hole (e_t))] {(n_hole (e_t))}\n\
+     MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))}] |- {((T && (1 == 1)) \
+     && ((Forall fresh2). ((Forall fresh3). ((fresh2 == 1) => ((0 + fresh2) == \
+     1)))))} [N MGF=(e_t == 1)] {(e_t == 1)} -> [{(((T && (e_t == e_t_2)) && \
+     (b_t <-> b_t_2)) && (x == x_2))} [S MGF=((0 < x) || (0 == x))] {((0 < x) \
+     || (0 == x))}] |- {((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N \
+     MGF=(e_t == 1)] {(e_t == 1)}\n\
      Adapt: [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S \
-     MGF=(s_hole (x))] {(s_hole (x))}] |- {((T && (e_t == e_t_2)) && (b_t <-> \
-     b_t_2))} [N MGF=(n_hole (e_t))] {(n_hole (e_t))} -> [{(((T && (e_t == \
-     e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=(s_hole (x))] {(s_hole \
-     (x))}] |- {((Forall fresh2). ((Forall fresh3). ((n_hole (fresh2)) => \
-     (s_hole ((fresh1 + fresh2))))))} [N MGF=(n_hole (e_t))] {(s_hole ((fresh1 \
+     MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))}] |- {((T && (e_t == \
+     e_t_2)) && (b_t <-> b_t_2))} [N MGF=(e_t == 1)] {(e_t == 1)} -> [{(((T && \
+     (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=((0 < x) || (0 \
+     == x))] {((0 < x) || (0 == x))}] |- {((Forall fresh2). ((Forall fresh3). \
+     ((fresh2 == 1) => ((0 < (fresh1 + fresh2)) || (0 == (fresh1 + \
+     fresh2))))))} [N MGF=(e_t == 1)] {((0 < (fresh1 + e_t)) || (0 == (fresh1 \
      + e_t)))}\n\
      Plus: [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S \
-     MGF=(s_hole (x))] {(s_hole (x))}] |- {((Forall fresh2). ((Forall fresh3). \
-     ((n_hole (fresh2)) => (s_hole ((x + fresh2))))))} x {((Forall fresh2). \
-     ((Forall fresh3). ((n_hole (fresh2)) => (s_hole ((e_t + fresh2))))))}, \
-     [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S \
-     MGF=(s_hole (x))] {(s_hole (x))}] |- {((Forall fresh2). ((Forall fresh3). \
-     ((n_hole (fresh2)) => (s_hole ((fresh1 + fresh2))))))} [N MGF=(n_hole \
-     (e_t))] {(s_hole ((fresh1 + e_t)))} -> [{(((T && (e_t == e_t_2)) && (b_t \
-     <-> b_t_2)) && (x == x_2))} [S MGF=(s_hole (x))] {(s_hole (x))}] |- \
-     {((Forall fresh2). ((Forall fresh3). ((n_hole (fresh2)) => (s_hole ((x + \
-     fresh2))))))} (x + [N MGF=(n_hole (e_t))]) {(s_hole (e_t))}\n\
+     MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))}] |- {((Forall fresh2). \
+     ((Forall fresh3). ((fresh2 == 1) => ((0 < (x + fresh2)) || (0 == (x + \
+     fresh2))))))} x {((Forall fresh2). ((Forall fresh3). ((fresh2 == 1) => \
+     ((0 < (e_t + fresh2)) || (0 == (e_t + fresh2))))))}, [{(((T && (e_t == \
+     e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=((0 < x) || (0 == x))] \
+     {((0 < x) || (0 == x))}] |- {((Forall fresh2). ((Forall fresh3). ((fresh2 \
+     == 1) => ((0 < (fresh1 + fresh2)) || (0 == (fresh1 + fresh2))))))} [N \
+     MGF=(e_t == 1)] {((0 < (fresh1 + e_t)) || (0 == (fresh1 + e_t)))} -> \
+     [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=((0 \
+     < x) || (0 == x))] {((0 < x) || (0 == x))}] |- {((Forall fresh2). \
+     ((Forall fresh3). ((fresh2 == 1) => ((0 < (x + fresh2)) || (0 == (x + \
+     fresh2))))))} (x + [N MGF=(n_hole (e_t))]) {((0 < e_t) || (0 == e_t))}\n\
      Assign: [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S \
-     MGF=(s_hole (x))] {(s_hole (x))}] |- {((Forall fresh2). ((Forall fresh3). \
-     ((n_hole (fresh2)) => (s_hole ((x + fresh2))))))} (x + [N MGF=(n_hole \
-     (e_t))]) {(s_hole (e_t))} -> [{(((T && (e_t == e_t_2)) && (b_t <-> \
-     b_t_2)) && (x == x_2))} [S MGF=(s_hole (x))] {(s_hole (x))}] |- {((Forall \
-     fresh2). ((Forall fresh3). ((n_hole (fresh2)) => (s_hole ((x + \
-     fresh2))))))} (x := (x + [N MGF=(n_hole (e_t))])) {(s_hole (x))}\n\
+     MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))}] |- {((Forall fresh2). \
+     ((Forall fresh3). ((fresh2 == 1) => ((0 < (x + fresh2)) || (0 == (x + \
+     fresh2))))))} (x + [N MGF=(n_hole (e_t))]) {((0 < e_t) || (0 == e_t))} -> \
+     [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=((0 \
+     < x) || (0 == x))] {((0 < x) || (0 == x))}] |- {((Forall fresh2). \
+     ((Forall fresh3). ((fresh2 == 1) => ((0 < (x + fresh2)) || (0 == (x + \
+     fresh2))))))} (x := (x + [N MGF=(n_hole (e_t))])) {((0 < x) || (0 == x))}\n\
      Seq: [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S \
-     MGF=(s_hole (x))] {(s_hole (x))}] |- {((Forall fresh1). ((Forall fresh4). \
-     ((Forall fresh5). ((s_hole (fresh5)) => ((Forall fresh2). ((Forall \
-     fresh3). ((n_hole (fresh2)) => (s_hole ((fresh5 + fresh2))))))))))} [S \
-     MGF=(s_hole (x))] {((Forall fresh2). ((Forall fresh3). ((n_hole (fresh2)) \
-     => (s_hole ((x + fresh2))))))}, [{(((T && (e_t == e_t_2)) && (b_t <-> \
-     b_t_2)) && (x == x_2))} [S MGF=(s_hole (x))] {(s_hole (x))}] |- {((Forall \
-     fresh2). ((Forall fresh3). ((n_hole (fresh2)) => (s_hole ((x + \
-     fresh2))))))} (x := (x + [N MGF=(n_hole (e_t))])) {(s_hole (x))} -> \
-     [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S \
-     MGF=(s_hole (x))] {(s_hole (x))}] |- {((Forall fresh1). ((Forall fresh4). \
-     ((Forall fresh5). ((s_hole (fresh5)) => ((Forall fresh2). ((Forall \
-     fresh3). ((n_hole (fresh2)) => (s_hole ((fresh5 + fresh2))))))))))} ([S \
-     MGF=(s_hole (x))]; (x := (x + [N MGF=(n_hole (e_t))]))) {(s_hole (x))}\n\
+     MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))}] |- {((Forall fresh1). \
+     ((Forall fresh4). ((Forall fresh5). (((0 < fresh5) || (0 == fresh5)) => \
+     ((Forall fresh2). ((Forall fresh3). ((fresh2 == 1) => ((0 < (fresh5 + \
+     fresh2)) || (0 == (fresh5 + fresh2))))))))))} [S MGF=((0 < x) || (0 == \
+     x))] {((Forall fresh2). ((Forall fresh3). ((fresh2 == 1) => ((0 < (x + \
+     fresh2)) || (0 == (x + fresh2))))))}, [{(((T && (e_t == e_t_2)) && (b_t \
+     <-> b_t_2)) && (x == x_2))} [S MGF=((0 < x) || (0 == x))] {((0 < x) || (0 \
+     == x))}] |- {((Forall fresh2). ((Forall fresh3). ((fresh2 == 1) => ((0 < \
+     (x + fresh2)) || (0 == (x + fresh2))))))} (x := (x + [N MGF=(n_hole \
+     (e_t))])) {((0 < x) || (0 == x))} -> [{(((T && (e_t == e_t_2)) && (b_t \
+     <-> b_t_2)) && (x == x_2))} [S MGF=((0 < x) || (0 == x))] {((0 < x) || (0 \
+     == x))}] |- {((Forall fresh1). ((Forall fresh4). ((Forall fresh5). (((0 < \
+     fresh5) || (0 == fresh5)) => ((Forall fresh2). ((Forall fresh3). ((fresh2 \
+     == 1) => ((0 < (fresh5 + fresh2)) || (0 == (fresh5 + fresh2))))))))))} \
+     ([S MGF=(s_hole (x))]; (x := (x + [N MGF=(n_hole (e_t))]))) {((0 < x) || \
+     (0 == x))}\n\
      HP: [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S \
-     MGF=(s_hole (x))] {(s_hole (x))}] |- {((Forall fresh1). ((Forall fresh2). \
-     ((n_hole (fresh1)) => (s_hole (fresh1)))))} (x := [N MGF=(n_hole (e_t))]) \
-     {(s_hole (x))}, [{(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == \
-     x_2))} [S MGF=(s_hole (x))] {(s_hole (x))}] |- {((Forall fresh1). \
-     ((Forall fresh4). ((Forall fresh5). ((s_hole (fresh5)) => ((Forall \
-     fresh2). ((Forall fresh3). ((n_hole (fresh2)) => (s_hole ((fresh5 + \
+     MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))}] |- {((Forall fresh1). \
+     ((Forall fresh2). ((fresh1 == 1) => ((0 < fresh1) || (0 == fresh1)))))} \
+     (x := [N MGF=(n_hole (e_t))]) {((0 < x) || (0 == x))}, [{(((T && (e_t == \
+     e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S MGF=((0 < x) || (0 == x))] \
+     {((0 < x) || (0 == x))}] |- {((Forall fresh1). ((Forall fresh4). ((Forall \
+     fresh5). (((0 < fresh5) || (0 == fresh5)) => ((Forall fresh2). ((Forall \
+     fresh3). ((fresh2 == 1) => ((0 < (fresh5 + fresh2)) || (0 == (fresh5 + \
      fresh2))))))))))} ([S MGF=(s_hole (x))]; (x := (x + [N MGF=(n_hole \
-     (e_t))]))) {(s_hole (x))} -> {((T && ((Forall fresh1). ((Forall fresh2). \
-     ((n_hole (fresh1)) => (s_hole (fresh1)))))) && ((Forall fresh1). ((Forall \
-     fresh4). ((Forall fresh5). ((s_hole (fresh5)) => ((Forall fresh2). \
-     ((Forall fresh3). ((n_hole (fresh2)) => (s_hole ((fresh5 + \
-     fresh2)))))))))))} [S MGF=(s_hole (x))] {(s_hole (x))}\n\
-     Weaken: {((T && ((Forall fresh1). ((Forall fresh2). ((n_hole (fresh1)) => \
-     (s_hole (fresh1)))))) && ((Forall fresh1). ((Forall fresh4). ((Forall \
-     fresh5). ((s_hole (fresh5)) => ((Forall fresh2). ((Forall fresh3). \
-     ((n_hole (fresh2)) => (s_hole ((fresh5 + fresh2)))))))))))} [S \
-     MGF=(s_hole (x))] {(s_hole (x))} -> {(((T && (e_t == e_t_2)) && (b_t <-> \
-     b_t_2)) && (x == x_2))} [S MGF=(s_hole (x))] {(s_hole (x))}\n\
+     (e_t))]))) {((0 < x) || (0 == x))} -> {((T && ((Forall fresh1). ((Forall \
+     fresh2). ((fresh1 == 1) => ((0 < fresh1) || (0 == fresh1)))))) && \
+     ((Forall fresh1). ((Forall fresh4). ((Forall fresh5). (((0 < fresh5) || \
+     (0 == fresh5)) => ((Forall fresh2). ((Forall fresh3). ((fresh2 == 1) => \
+     ((0 < (fresh5 + fresh2)) || (0 == (fresh5 + fresh2)))))))))))} [S MGF=((0 \
+     < x) || (0 == x))] {((0 < x) || (0 == x))}\n\
+     Weaken: {((T && ((Forall fresh1). ((Forall fresh2). ((fresh1 == 1) => ((0 \
+     < fresh1) || (0 == fresh1)))))) && ((Forall fresh1). ((Forall fresh4). \
+     ((Forall fresh5). (((0 < fresh5) || (0 == fresh5)) => ((Forall fresh2). \
+     ((Forall fresh3). ((fresh2 == 1) => ((0 < (fresh5 + fresh2)) || (0 == \
+     (fresh5 + fresh2)))))))))))} [S MGF=((0 < x) || (0 == x))] {((0 < x) || \
+     (0 == x))} -> {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == \
+     x_2))} [S MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))}\n\
      Adapt: {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == x_2))} [S \
-     MGF=(s_hole (x))] {(s_hole (x))} -> {((Forall fresh1). ((Forall fresh2). \
-     ((Forall fresh3). ((s_hole (fresh3)) => (-1 < fresh3)))))} [S MGF=(s_hole \
-     (x))] {(-1 < x)}\n\
-     Weaken: {((Forall fresh1). ((Forall fresh2). ((Forall fresh3). ((s_hole \
-     (fresh3)) => (-1 < fresh3)))))} [S MGF=(s_hole (x))] {(-1 < x)} -> {(x == \
-     1)} [S MGF=(s_hole (x))] {(-1 < x)}"
+     MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))} -> {((Forall fresh1). \
+     ((Forall fresh2). ((Forall fresh3). (((0 < fresh3) || (0 == fresh3)) => \
+     (-1 < fresh3)))))} [S MGF=((0 < x) || (0 == x))] {(-1 < x)}\n\
+     Weaken: {((Forall fresh1). ((Forall fresh2). ((Forall fresh3). (((0 < \
+     fresh3) || (0 == fresh3)) => (-1 < fresh3)))))} [S MGF=((0 < x) || (0 == \
+     x))] {(-1 < x)} -> {(x == 1)} [S MGF=((0 < x) || (0 == x))] {(-1 < x)}"
 
 let () =
   test_axiom;

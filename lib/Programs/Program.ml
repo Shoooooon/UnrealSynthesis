@@ -1,6 +1,6 @@
 open NonTerminal
-open Variable
-module VS = Set.Make (Variable)
+open Logic.Variable
+module VS = Set.Make (Logic.Variable)
 
 type numeric_exp =
   | Zero
@@ -24,7 +24,7 @@ type stmt =
   | Assign of string * numeric_exp
   | Seq of stmt * stmt
   | ITE of boolean_exp * stmt * stmt
-  | While of boolean_exp * Formula.formula * stmt
+  | While of boolean_exp * Logic.Formula.formula * stmt
   | SNTerm of stmt nonterminal
 
 module SNTS = Set.Make (struct
@@ -74,7 +74,7 @@ let rec prog_tostr prog =
         (prog_tostr (Stmt s1)) (prog_tostr (Stmt s2))
   | Stmt (While (b, inv, s)) ->
       Printf.sprintf "(while %s do (Inv=%s) %s)" (prog_tostr (Boolean b))
-        (Formula.form_tostr inv) (prog_tostr (Stmt s))
+        (Logic.Formula.form_tostr inv) (prog_tostr (Stmt s))
   | Stmt (SNTerm nterm) -> to_str nterm
 
 (* Returns vars (as formula vars) whose values may be changed by any program in the set.

@@ -1,0 +1,3 @@
+(library
+ (name Logic)
+ (libraries re lwt lwt.unix z3))
