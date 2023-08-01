@@ -182,7 +182,8 @@ let nonterm_handler nterm ctrip to_prog
                  }
                  implies)
               pflist)
-          (Programs.NonTerminal.expand nterm) []
+          (Programs.NonTerminal.expand nterm)
+          []
       in
       (* Assemble the grmdisj proof *)
       GrmDisj
@@ -194,7 +195,8 @@ let nonterm_handler nterm ctrip to_prog
                   List.fold_left
                     (fun form hypothesis ->
                       (* "T \land" Could be better *)
-                      Logic.Formula.And (form, (get_conclusion hypothesis).trip.pre))
+                      Logic.Formula.And
+                        (form, (get_conclusion hypothesis).trip.pre))
                     True hypotheses;
                 prog = trip.prog;
                 post = trip.post;
@@ -225,8 +227,10 @@ let nonterm_handler nterm ctrip to_prog
         List.fold_left
           (fun form (prog_var, ghost_var) ->
             match (prog_var, ghost_var) with
-            | TermVar p, TermVar g -> Logic.Formula.And (form, Equals (TVar p, TVar g))
-            | BoolVar p, BoolVar g -> Logic.Formula.And (form, Iff (BVar p, BVar g))
+            | TermVar p, TermVar g ->
+                Logic.Formula.And (form, Equals (TVar p, TVar g))
+            | BoolVar p, BoolVar g ->
+                Logic.Formula.And (form, Iff (BVar p, BVar g))
             | _ -> raise (Bad_Strongest_Triple (prog_tostr trip.prog, "")))
           True var_pairs_list
       in
@@ -318,7 +322,8 @@ let nonterm_handler nterm ctrip to_prog
                       pre =
                         List.fold_left
                           (fun form pf ->
-                            Logic.Formula.And (form, (get_conclusion pf).trip.pre))
+                            Logic.Formula.And
+                              (form, (get_conclusion pf).trip.pre))
                           True hp_proofs;
                       prog = trip.prog;
                       post = postc;

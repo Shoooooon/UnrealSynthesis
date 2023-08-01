@@ -109,7 +109,8 @@ let to_negated_smt form name =
     (to_smt_helper form)
 
 let parse_func_decl definition_str =
-  SMT2Parser.Parser.fun_decl SMT2Parser.Lexer.read (Lexing.from_string definition_str)
+  SMT2Parser.Parser.fun_decl SMT2Parser.Lexer.read
+    (Lexing.from_string definition_str)
 
 (* Hole checking/manipulating functions *)
 let rec has_holes form =

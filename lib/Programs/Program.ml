@@ -74,7 +74,8 @@ let rec prog_tostr prog =
         (prog_tostr (Stmt s1)) (prog_tostr (Stmt s2))
   | Stmt (While (b, inv, s)) ->
       Printf.sprintf "(while %s do (Inv=%s) %s)" (prog_tostr (Boolean b))
-        (Logic.Formula.form_tostr inv) (prog_tostr (Stmt s))
+        (Logic.Formula.form_tostr inv)
+        (prog_tostr (Stmt s))
   | Stmt (SNTerm nterm) -> to_str nterm
 
 (* Returns vars (as formula vars) whose values may be changed by any program in the set.
