@@ -38,7 +38,6 @@
 %%
 
 fun_decl:
-  // | LEFT_PAREN DEF_FUN fn_name=STRING args=args_list BOOL_KWD fn_body=form RIGHT_PAREN {(List.iter popper args); (fn_name, fn_body)}
   | LEFT_PAREN DEF_FUN fn_name=STRING args=args_list BOOL_KWD fn_body=form RIGHT_PAREN {popper (List.length args); (fn_name, fn_body)}
 
 args_list:
@@ -57,8 +56,6 @@ term:
   | LEFT_PAREN MINUS t=term RIGHT_PAREN {Formula.Minus t}
   | LEFT_PAREN PLUS t1=term t2=term RIGHT_PAREN {Formula.Plus (t1, t2)}
 
-// Note: Reduce/reduce conflict with (= ... ) since it's polymorphic
-// TODO: In general, we may want to introduce a better interface between our formula implementation and this SMT2 one
 form:
   | TRUE {True}
   | FALSE {False}

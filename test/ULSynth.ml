@@ -1229,6 +1229,17 @@ let test_rec_nonterm_with_hole =
      fresh3) || (0 == fresh3)) => (-1 < fresh3)))))} [S MGF=((0 < x) || (0 == \
      x))] {(-1 < x)} -> {(x == 1)} [S MGF=((0 < x) || (0 == x))] {(-1 < x)}"
 
+  let test_triple_parse = 
+    print_endline (trip_tostr (ULSynth.Claimparser.ultriple ULSynth.Claimlexer.read
+    (Lexing.from_string 
+    "{|true|} Stmt (:= x 0) {|false|}")));
+    print_endline (trip_tostr (ULSynth.Claimparser.ultriple ULSynth.Claimlexer.read
+    (Lexing.from_string 
+    "{|true|} Bool (or (= x x) (< 1 0)) {|false|}")));
+    print_endline (trip_tostr (ULSynth.Claimparser.ultriple ULSynth.Claimlexer.read
+    (Lexing.from_string 
+    "{|true|} Int (+ 0 1) {|false|}")))
+
 let () =
   test_axiom;
   test_not;
@@ -1238,4 +1249,5 @@ let () =
   test_while;
   test_nonrec_nonterm;
   test_rec_nonterm_no_hole;
-  test_rec_nonterm_with_hole
+  test_rec_nonterm_with_hole;
+  test_triple_parse

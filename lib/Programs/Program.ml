@@ -2,7 +2,8 @@ open NonTerminal
 open Logic.Variable
 module VS = Set.Make (Logic.Variable)
 
-type numeric_exp =
+(* TODO: Expand support for program constants *)
+type numeric_exp = 
   | Zero
   | One
   | Var of string
