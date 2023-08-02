@@ -310,7 +310,7 @@ let nonterm_handler nterm ctrip to_prog
                     trip = { prog = to_prog expansion; post = postc };
                   }
                   implies)
-              nterm.expansions
+              (Programs.NonTerminal.expand nterm)
           in
           (* TODO - Improve T \land ... *)
           let hp =

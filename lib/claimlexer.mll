@@ -18,13 +18,20 @@ rule read =
   | int      { INT (int_of_string (Lexing.lexeme lexbuf)) }
   | "Int" {INT_KWD}
   | "Bool" {BOOL_KWD} 
-  | "Stmt" {STMT_KWD}
+  | "Stmt" {STMT_KWD} 
+  | "Nonterm" {NT_KWD}
+  | "None" {NONE_KWD}
+  | "Some" {SOME_KWD}
+  | "Hole" {HOLE_KWD}
+  | "b_t" {BT}
+  | "e_t" {ET}
   | "not" {NOT}
   | "and" {AND}
   | "or" {OR}
   | "+" {PLUS}
   | "-" {MINUS}
   | "=" {EQUALS}
+  | "<->" {IFF}
   | "<" {LESS}
   | "<=" {LESS_EQUALS}
   | ">" {GREATER}
@@ -32,6 +39,8 @@ rule read =
   | "=>" {IMPLIES}
   | ":=" {ASSIGN}
   | ";" {SEMICOLON}
+  | "," {COMMA}
+  | ":" {COLON}
   | "{|" {LEFT_FORM_DEMARCATOR}
   | "|}" {RIGHT_FORM_DEMARCATOR}
   | "while" {WHILE}
@@ -44,5 +53,7 @@ rule read =
   | "false"  { FALSE }
   | '('      { LEFT_PAREN }
   | ')'      { RIGHT_PAREN }
+  | '['      { LEFT_SQUARE }
+  | ']'      { RIGHT_SQUARE }
   | varName {STRING (Lexing.lexeme lexbuf)}
   | _ { raise (SyntaxError ("Unexpected char: " ^ Lexing.lexeme lexbuf)) }

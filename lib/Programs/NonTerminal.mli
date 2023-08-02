@@ -1,9 +1,11 @@
 open Logic.Variable
 open Logic.Formula
 
+exception Empty_Nonterm of string
+
 type 'program nonterminal = {
   name : string;
-  expansions : 'program list;
+  expansions : 'program list Lazy.t;
   (* When a non-terminal is not recursive, strongest should be None. *)
   strongest : ((variable * variable) list * formula) option;
 }
@@ -20,3 +22,6 @@ val sub_hole_nterm :
 
 (* Expands a non-terminal to its productions given by a list of programs. *)
 val expand : 'program nonterminal -> 'program list
+
+(* Getter for the name of a nonterminal since I cannot access it normally somehow from the claimparser.*)
+val name : 'program nonterminal -> string

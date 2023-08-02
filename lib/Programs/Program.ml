@@ -3,7 +3,7 @@ open Logic.Variable
 module VS = Set.Make (Logic.Variable)
 
 (* TODO: Expand support for program constants *)
-type numeric_exp = 
+type numeric_exp =
   | Zero
   | One
   | Var of string
@@ -105,8 +105,87 @@ let rec reassigned_vars_helper prog examined =
           (List.map
              (fun expansion ->
                reassigned_vars_helper (Stmt expansion) (SNTS.add n examined))
-             n.expansions)
+             (NonTerminal.expand n))
 
 let reassigned_vars prog =
   VS.add (TermVar ET)
     (VS.add (BoolVar BT) (reassigned_vars_helper prog SNTS.empty))
+
+(* Substitution of nonterminals according to given grammar. Useful when recursively defining grammars. *)
+type grammar = {
+  grammar_num : numeric_exp nonterminal list;
+  grammar_bool : boolean_exp nonterminal list;
+  grammar_stmt : stmt nonterminal list;
+}
+
+let rec subs_nonterms_numeric lazy_grammar num =
+  let grammar = Lazy.force lazy_grammar in
+  match num with
+  | Plus (n1, n2) ->
+      Plus
+        ( subs_nonterms_numeric lazy_grammar n1,
+          subs_nonterms_numeric lazy_grammar n2 )
+  | ITE (b, n1, n2) ->
+      ITE
+        ( subs_nonterms_boolean lazy_grammar b,
+          subs_nonterms_numeric lazy_grammar n1,
+          subs_nonterms_numeric lazy_grammar n2 )
+  | NNTerm nt ->
+      if List.exists (fun n -> n.name = nt.name) grammar.grammar_num then
+        NNTerm (List.find (fun n -> n.name = nt.name) grammar.grammar_num)
+      else num
+  | _ -> num
+
+and subs_nonterms_boolean lazy_grammar boolean =
+  let grammar = Lazy.force lazy_grammar in
+  match boolean with
+  | Not b -> Not (subs_nonterms_boolean lazy_grammar b)
+  | And (b1, b2) ->
+      And
+        ( subs_nonterms_boolean lazy_grammar b1,
+          subs_nonterms_boolean lazy_grammar b2 )
+  | Or (b1, b2) ->
+      Or
+        ( subs_nonterms_boolean lazy_grammar b1,
+          subs_nonterms_boolean lazy_grammar b2 )
+  | Equals (n1, n2) ->
+      Equals
+        ( subs_nonterms_numeric lazy_grammar n1,
+          subs_nonterms_numeric lazy_grammar n2 )
+  | Less (n1, n2) ->
+      Less
+        ( subs_nonterms_numeric lazy_grammar n1,
+          subs_nonterms_numeric lazy_grammar n2 )
+  | BNTerm nt ->
+      if List.exists (fun b -> b.name = nt.name) grammar.grammar_bool then
+        BNTerm (List.find (fun b -> b.name = nt.name) grammar.grammar_bool)
+      else boolean
+  | _ -> boolean
+
+and subs_nonterms_stmt lazy_grammar stmt =
+  let grammar = Lazy.force lazy_grammar in
+  match stmt with
+  | Assign (s, n) -> Assign (s, subs_nonterms_numeric lazy_grammar n)
+  | Seq (s1, s2) ->
+      Seq
+        (subs_nonterms_stmt lazy_grammar s1, subs_nonterms_stmt lazy_grammar s2)
+  | ITE (b, s1, s2) ->
+      ITE
+        ( subs_nonterms_boolean lazy_grammar b,
+          subs_nonterms_stmt lazy_grammar s1,
+          subs_nonterms_stmt lazy_grammar s2 )
+  | While (b, form, s) ->
+      While
+        ( subs_nonterms_boolean lazy_grammar b,
+          form,
+          subs_nonterms_stmt lazy_grammar s )
+  | SNTerm nt ->
+      if List.exists (fun s -> s.name = nt.name) grammar.grammar_stmt then
+        SNTerm (List.find (fun s -> s.name = nt.name) grammar.grammar_stmt)
+      else stmt
+
+let subs_nonterms lazy_grammar program =
+  match program with
+  | Numeric n -> Numeric (subs_nonterms_numeric lazy_grammar n)
+  | Boolean b -> Boolean (subs_nonterms_boolean lazy_grammar b)
+  | Stmt s -> Stmt (subs_nonterms_stmt lazy_grammar s)

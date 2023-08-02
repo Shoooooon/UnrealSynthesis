@@ -441,7 +441,7 @@ let test_nonrec_nonterm =
           (NNTerm
              {
                name = "N";
-               expansions = [ One; Plus (One, Zero) ];
+               expansions = lazy [ One; Plus (One, Zero) ];
                strongest = None;
              });
       post = Less (TVar ET, Int 2);
@@ -465,7 +465,7 @@ let test_nonrec_nonterm =
           (BNTerm
              {
                name = "B";
-               expansions = [ True; Equals (Zero, Zero) ];
+               expansions = lazy [ True; Equals (Zero, Zero) ];
                strongest = None;
              });
       post = BVar BT;
@@ -489,9 +489,11 @@ let test_nonrec_nonterm =
              {
                name = "S";
                expansions =
-                 [
-                   Assign ("x", One); Seq (Assign ("x", Zero), Assign ("x", One));
-                 ];
+                 lazy
+                   [
+                     Assign ("x", One);
+                     Seq (Assign ("x", Zero), Assign ("x", One));
+                   ];
                strongest = None;
              });
       post = Equals (TVar (T "x"), Int 1);
@@ -513,7 +515,7 @@ let test_rec_nonterm_no_hole =
   let rec n =
     {
       name = "N";
-      expansions = [ One; Plus (One, NNTerm n) ];
+      expansions = lazy [ One; Plus (One, NNTerm n) ];
       strongest =
         Some
           ( [
@@ -570,7 +572,7 @@ let test_rec_nonterm_no_hole =
     {
       name = "B";
       expansions =
-        [ Equals (Var "x", One); Or (BNTerm b, Equals (Var "x", Zero)) ];
+        lazy [ Equals (Var "x", One); Or (BNTerm b, Equals (Var "x", Zero)) ];
       strongest =
         Some
           ( [
@@ -658,7 +660,7 @@ let test_rec_nonterm_no_hole =
   let rec n =
     {
       name = "N";
-      expansions = [ One; Plus (Zero, NNTerm n) ];
+      expansions = lazy [ One; Plus (Zero, NNTerm n) ];
       strongest =
         Some
           ( [
@@ -671,10 +673,11 @@ let test_rec_nonterm_no_hole =
     {
       name = "S";
       expansions =
-        [
-          Assign ("x", NNTerm n);
-          Seq (SNTerm s, Assign ("x", Plus (Var "x", NNTerm n)));
-        ];
+        lazy
+          [
+            Assign ("x", NNTerm n);
+            Seq (SNTerm s, Assign ("x", Plus (Var "x", NNTerm n)));
+          ];
       strongest =
         Some
           ( [
@@ -881,7 +884,7 @@ let test_rec_nonterm_with_hole =
     {
       name = "B";
       expansions =
-        [ Equals (Var "x", One); Or (BNTerm b, Equals (Var "x", Zero)) ];
+        lazy [ Equals (Var "x", One); Or (BNTerm b, Equals (Var "x", Zero)) ];
       strongest =
         Some
           ( [
@@ -972,7 +975,7 @@ let test_rec_nonterm_with_hole =
   let rec n =
     {
       name = "N";
-      expansions = [ One; Plus (Zero, NNTerm n) ];
+      expansions = lazy [ One; Plus (Zero, NNTerm n) ];
       strongest =
         Some
           ( [
@@ -985,10 +988,11 @@ let test_rec_nonterm_with_hole =
     {
       name = "S";
       expansions =
-        [
-          Assign ("x", NNTerm n);
-          Seq (SNTerm s, Assign ("x", Plus (Var "x", NNTerm n)));
-        ];
+        lazy
+          [
+            Assign ("x", NNTerm n);
+            Seq (SNTerm s, Assign ("x", Plus (Var "x", NNTerm n)));
+          ];
       strongest =
         Some
           ( [
@@ -1229,16 +1233,107 @@ let test_rec_nonterm_with_hole =
      fresh3) || (0 == fresh3)) => (-1 < fresh3)))))} [S MGF=((0 < x) || (0 == \
      x))] {(-1 < x)} -> {(x == 1)} [S MGF=((0 < x) || (0 == x))] {(-1 < x)}"
 
-  let test_triple_parse = 
-    print_endline (trip_tostr (ULSynth.Claimparser.ultriple ULSynth.Claimlexer.read
-    (Lexing.from_string 
-    "{|true|} Stmt (:= x 0) {|false|}")));
-    print_endline (trip_tostr (ULSynth.Claimparser.ultriple ULSynth.Claimlexer.read
-    (Lexing.from_string 
-    "{|true|} Bool (or (= x x) (< 1 0)) {|false|}")));
-    print_endline (trip_tostr (ULSynth.Claimparser.ultriple ULSynth.Claimlexer.read
-    (Lexing.from_string 
-    "{|true|} Int (+ 0 1) {|false|}")))
+let test_triple_parse =
+  print_endline
+    (trip_tostr
+       (ULSynth.Claimparser.ultriple ULSynth.Claimlexer.read
+          (Lexing.from_string "[] {|true|} Stmt (:= x 0) {|false|}")));
+  print_endline
+    (trip_tostr
+       (ULSynth.Claimparser.ultriple ULSynth.Claimlexer.read
+          (Lexing.from_string "[] {|true|} Bool (or (= x x) (< 1 0)) {|false|}")));
+  print_endline
+    (trip_tostr
+       (ULSynth.Claimparser.ultriple ULSynth.Claimlexer.read
+          (Lexing.from_string
+             "[Int N : [1] : None] {|true|} Int (+ 0 1) {|false|}")));
+
+  check_proof_no_hole
+    (ULSynth.Claimparser.ultriple ULSynth.Claimlexer.read
+       (Lexing.from_string
+          "[Int N : [1, (+ 1 0)] : None] {|true|} Int Nonterm N {|(< e_t 2)|}"))
+    "One: -> {(1 < 2)} 1 {(e_t < 2)}\n\
+     One: -> {((1 + 0) < 2)} 1 {((e_t + 0) < 2)}\n\
+     Zero: -> {((fresh1 + 0) < 2)} 0 {((fresh1 + e_t) < 2)}\n\
+     Plus: {((1 + 0) < 2)} 1 {((e_t + 0) < 2)}, {((fresh1 + 0) < 2)} 0 \
+     {((fresh1 + e_t) < 2)} -> {((1 + 0) < 2)} (1 + 0) {(e_t < 2)}\n\
+     GrmDisj: {(1 < 2)} 1 {(e_t < 2)}, {((1 + 0) < 2)} (1 + 0) {(e_t < 2)} -> \
+     {((T && (1 < 2)) && ((1 + 0) < 2))} N {(e_t < 2)}\n\
+     Weaken: {((T && (1 < 2)) && ((1 + 0) < 2))} N {(e_t < 2)} -> {T} N {(e_t \
+     < 2)}";
+
+  check_proof_with_hole
+    (ULSynth.Claimparser.ultriple ULSynth.Claimlexer.read
+       (Lexing.from_string
+          "[Bool B : [(= x 1), (or Nonterm B (= x 0))] : Some ([(Int e_t, Int \
+           e_t_2) ; (Bool b_t, Bool b_t_2)] : (Hole : hole [Bool b_t, Int x]))] {|(= x 1)|} Bool Nonterm B {|b_t|}"))
+    "Var: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == x) \
+     || b_t)] {(!(1 == x) || b_t)}] |- {(!(1 == x) || (x == 1))} x {(!(1 == x) \
+     || (e_t == 1))}\n\
+     One: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == x) \
+     || b_t)] {(!(1 == x) || b_t)}] |- {(!(1 == x) || (fresh1 == 1))} 1 {(!(1 \
+     == x) || (fresh1 == e_t))}\n\
+     Equals: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == x) \
+     || b_t)] {(!(1 == x) || b_t)}] |- {(!(1 == x) || (x == 1))} x {(!(1 == x) \
+     || (e_t == 1))}, [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B \
+     MGF=(!(1 == x) || b_t)] {(!(1 == x) || b_t)}] |- {(!(1 == x) || (fresh1 \
+     == 1))} 1 {(!(1 == x) || (fresh1 == e_t))} -> [{((T && (e_t == e_t_2)) && \
+     (b_t <-> b_t_2))} [B MGF=(!(1 == x) || b_t)] {(!(1 == x) || b_t)}] |- \
+     {(!(1 == x) || (x == 1))} (x = 1) {(!(1 == x) || b_t)}\n\
+     ApplyHP: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == \
+     x) || b_t)] {(!(1 == x) || b_t)}] |- {((T && (e_t == e_t_2)) && (b_t <-> \
+     b_t_2))} [B MGF=(!(1 == x) || b_t)] {(!(1 == x) || b_t)}\n\
+     Adapt: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == x) || \
+     b_t)] {(!(1 == x) || b_t)}] |- {((T && (e_t == e_t_2)) && (b_t <-> \
+     b_t_2))} [B MGF=(!(1 == x) || b_t)] {(!(1 == x) || b_t)} -> [{((T && (e_t \
+     == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == x) || b_t)] {(!(1 == x) || \
+     b_t)}] |- {((Forall fresh1). ((Forall fresh2). ((!(1 == x) || fresh2) => \
+     (!(1 == x) || (fresh2 || (x == 0))))))} [B MGF=(!(1 == x) || b_t)] {(!(1 \
+     == x) || (b_t || (x == 0)))}\n\
+     Var: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == x) \
+     || b_t)] {(!(1 == x) || b_t)}] |- {(!(1 == x) || (fresh1 || (x == 0)))} x \
+     {(!(1 == x) || (fresh1 || (e_t == 0)))}\n\
+     Zero: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == x) \
+     || b_t)] {(!(1 == x) || b_t)}] |- {(!(1 == x) || (fresh1 || (fresh2 == \
+     0)))} 0 {(!(1 == x) || (fresh1 || (fresh2 == e_t)))}\n\
+     Equals: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == x) \
+     || b_t)] {(!(1 == x) || b_t)}] |- {(!(1 == x) || (fresh1 || (x == 0)))} x \
+     {(!(1 == x) || (fresh1 || (e_t == 0)))}, [{((T && (e_t == e_t_2)) && (b_t \
+     <-> b_t_2))} [B MGF=(!(1 == x) || b_t)] {(!(1 == x) || b_t)}] |- {(!(1 == \
+     x) || (fresh1 || (fresh2 == 0)))} 0 {(!(1 == x) || (fresh1 || (fresh2 == \
+     e_t)))} -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == \
+     x) || b_t)] {(!(1 == x) || b_t)}] |- {(!(1 == x) || (fresh1 || (x == \
+     0)))} (x = 0) {(!(1 == x) || (fresh1 || b_t))}\n\
+     Or: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == x) || \
+     b_t)] {(!(1 == x) || b_t)}] |- {((Forall fresh1). ((Forall fresh2). ((!(1 \
+     == x) || fresh2) => (!(1 == x) || (fresh2 || (x == 0))))))} [B MGF=(!(1 \
+     == x) || b_t)] {(!(1 == x) || (b_t || (x == 0)))}, [{((T && (e_t == \
+     e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == x) || b_t)] {(!(1 == x) || \
+     b_t)}] |- {(!(1 == x) || (fresh1 || (x == 0)))} (x = 0) {(!(1 == x) || \
+     (fresh1 || b_t))} -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B \
+     MGF=(!(1 == x) || b_t)] {(!(1 == x) || b_t)}] |- {((Forall fresh1). \
+     ((Forall fresh2). ((!(1 == x) || fresh2) => (!(1 == x) || (fresh2 || (x \
+     == 0))))))} ([B MGF=(hole (b_t, x))] || (x = 0)) {(!(1 == x) || b_t)}\n\
+     HP: [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == x) || \
+     b_t)] {(!(1 == x) || b_t)}] |- {(!(1 == x) || (x == 1))} (x = 1) {(!(1 == \
+     x) || b_t)}, [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == \
+     x) || b_t)] {(!(1 == x) || b_t)}] |- {((Forall fresh1). ((Forall fresh2). \
+     ((!(1 == x) || fresh2) => (!(1 == x) || (fresh2 || (x == 0))))))} ([B \
+     MGF=(hole (b_t, x))] || (x = 0)) {(!(1 == x) || b_t)} -> {((T && (!(1 == \
+     x) || (x == 1))) && ((Forall fresh1). ((Forall fresh2). ((!(1 == x) || \
+     fresh2) => (!(1 == x) || (fresh2 || (x == 0)))))))} [B MGF=(!(1 == x) || \
+     b_t)] {(!(1 == x) || b_t)}\n\
+     Weaken: {((T && (!(1 == x) || (x == 1))) && ((Forall fresh1). ((Forall \
+     fresh2). ((!(1 == x) || fresh2) => (!(1 == x) || (fresh2 || (x == \
+     0)))))))} [B MGF=(!(1 == x) || b_t)] {(!(1 == x) || b_t)} -> {((T && (e_t \
+     == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == x) || b_t)] {(!(1 == x) || \
+     b_t)}\n\
+     Adapt: {((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == x) || \
+     b_t)] {(!(1 == x) || b_t)} -> {((Forall fresh1). ((Forall fresh2). ((!(1 \
+     == x) || fresh2) => fresh2)))} [B MGF=(!(1 == x) || b_t)] {b_t}\n\
+     Weaken: {((Forall fresh1). ((Forall fresh2). ((!(1 == x) || fresh2) => \
+     fresh2)))} [B MGF=(!(1 == x) || b_t)] {b_t} -> {(x == 1)} [B MGF=(!(1 == \
+     x) || b_t)] {b_t}"
 
 let () =
   test_axiom;

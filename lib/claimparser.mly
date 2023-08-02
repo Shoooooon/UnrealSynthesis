@@ -2,15 +2,9 @@
     open Logic.Formula
     open Logic.Variable
     open Programs.Program
-    exception Parse_Bad_TVar
-    exception Parse_Bad_BVar
-    exception Parse_Bad_Var
-    exception Parse_Bad_Equals_Type_Mismatch
     exception Parse_Bad_Prog_Int
     let make_exists body quant = Formula.Exists (quant, body)
     let make_forall body quant = Formula.Forall (quant, body)
-    let variable_context = (ref [])
-    let popper chop_num = variable_context := (List.filteri (fun i _ -> (i >= chop_num)) !variable_context)  
 %}
 
 %token <int> INT
@@ -18,6 +12,12 @@
 %token INT_KWD
 %token BOOL_KWD
 %token STMT_KWD
+%token NT_KWD
+%token NONE_KWD
+%token SOME_KWD
+%token HOLE_KWD
+%token ET
+%token BT
 %token NOT
 %token AND
 %token OR
@@ -26,6 +26,7 @@
 %token PLUS
 %token MINUS
 %token EQUALS
+%token IFF
 %token IMPLIES
 %token LESS
 %token LESS_EQUALS
@@ -33,6 +34,8 @@
 %token GREATER_EQUALS
 %token ASSIGN
 %token SEMICOLON
+%token COLON
+%token COMMA
 %token IF
 %token THEN
 %token ELSE
@@ -41,6 +44,8 @@
 %token FORALL
 %token LEFT_PAREN
 %token RIGHT_PAREN
+%token LEFT_SQUARE
+%token RIGHT_SQUARE
 %token LEFT_FORM_DEMARCATOR
 %token RIGHT_FORM_DEMARCATOR
 %start <ProofRule.triple> ultriple
@@ -48,14 +53,29 @@
 
 // Parse UL triples.
 ultriple:
-    LEFT_FORM_DEMARCATOR pren=formula RIGHT_FORM_DEMARCATOR progn=program LEFT_FORM_DEMARCATOR postn=formula RIGHT_FORM_DEMARCATOR {{ProofRule.pre = pren; prog = progn; post = postn}}
+    nt_list=grammar LEFT_FORM_DEMARCATOR pren=formula RIGHT_FORM_DEMARCATOR progn=program LEFT_FORM_DEMARCATOR postn=formula RIGHT_FORM_DEMARCATOR {
+      (*This will hang. We may need to make nonterminal expansions lazy. *)
+      let rec grammar = lazy {
+          grammar_num = (List.filter_map (fun nterm_dummy -> 
+      (match nterm_dummy with 
+        | Numeric (NNTerm n) -> Some {Programs.NonTerminal.name=n.name; expansions=lazy (List.map (subs_nonterms_numeric grammar) (Lazy.force n.expansions)); strongest=n.strongest}
+        | _ -> None)) (nt_list grammar));
+        grammar_bool = (List.filter_map (fun nterm_dummy -> 
+      (match nterm_dummy with 
+        | Boolean (BNTerm b) -> Some {Programs.NonTerminal.name=b.name; expansions=lazy (List.map (subs_nonterms_boolean grammar) (Lazy.force b.expansions)); strongest=b.strongest}
+        | _ -> None)) (nt_list grammar));
+        grammar_stmt = (List.filter_map (fun nterm_dummy -> 
+      (match nterm_dummy with 
+        | Stmt (SNTerm s) -> Some {Programs.NonTerminal.name=s.name; expansions=lazy (List.map (subs_nonterms_stmt grammar) (Lazy.force s.expansions)); strongest=s.strongest}
+        | _ -> None)) (nt_list grammar))
+      } in 
+      {ProofRule.pre = pren; prog = (progn grammar); post = postn}      
+      }
 
-
-
-// Utilities for parsing formulas -- Should roughly match smt2 format
+// Utilities for parsing formulas -- Roughly matches smt2 format except = is only for ints, and <-> is boolean equality
 form_args_list:
   |LEFT_PAREN RIGHT_PAREN {[]}
-  |LEFT_PAREN args=form_args RIGHT_PAREN {variable_context := List.append args !variable_context; args}
+  |LEFT_PAREN args=form_args RIGHT_PAREN {args}
 
 form_args:
   |LEFT_PAREN s=STRING INT_KWD RIGHT_PAREN {[Variable.TermVar (T s)]}
@@ -65,85 +85,142 @@ form_args:
 
 form_term:
   | i = INT {Int i}
-  | s = STRING {if s = "e_t" then (TVar ET) else (if (List.mem (Variable.TermVar (T s)) !variable_context) then (TVar (T s)) else raise Parse_Bad_TVar)}
+  | ET {TVar ET}
+  | s = STRING {TVar (T s)}
   | LEFT_PAREN MINUS t=form_term RIGHT_PAREN {Formula.Minus t}
   | LEFT_PAREN PLUS t1=form_term t2=form_term RIGHT_PAREN {Formula.Plus (t1, t2)}
 
 formula:
   | TRUE {True}
   | FALSE {False}
-  | s = STRING {if s = "b_t" then (BVar BT) else (if (List.mem (Variable.BoolVar (B s)) !variable_context) then (BVar (B s)) else raise Parse_Bad_BVar)}
+  | BT {BVar BT}
+  | s = STRING {BVar (B s)}
   | LEFT_PAREN AND f1=formula f2=formula RIGHT_PAREN {And (f1, f2)}
   | LEFT_PAREN OR f1=formula f2=formula RIGHT_PAREN {Or (f1, f2)}
   | LEFT_PAREN NOT f=formula RIGHT_PAREN {Not f}
   | LEFT_PAREN IMPLIES f1=formula f2=formula RIGHT_PAREN {Implies (f1, f2)}
-  | LEFT_PAREN EQUALS e1=form_exp e2=form_exp RIGHT_PAREN {
-    match e1, e2 with 
-    | Formula.Term t1, Formula.Term t2 -> Equals (t1, t2)
-    | Boolean b1, Boolean b2 -> Iff (b1, b2)
-    | _, _ -> raise Parse_Bad_Equals_Type_Mismatch}
+  | LEFT_PAREN EQUALS t1=form_term t2=form_term RIGHT_PAREN {Equals (t1, t2)}
+  | LEFT_PAREN IFF b1=formula b2=formula RIGHT_PAREN {Iff (b1, b2)}
   | LEFT_PAREN LESS t1=form_term t2=form_term RIGHT_PAREN {Less (t1, t2)}
   | LEFT_PAREN LESS_EQUALS t1=form_term t2=form_term RIGHT_PAREN {Or (Less (t1, t2), Equals (t1, t2))}
   | LEFT_PAREN GREATER t1=form_term t2=form_term RIGHT_PAREN {Less (t2, t1)}
   | LEFT_PAREN GREATER_EQUALS t1=form_term t2=form_term RIGHT_PAREN {Or (Less (t2, t1), Equals (t2, t1))}
-  | EXISTS quants=form_args_list body=formula {popper (List.length quants); (List.fold_left make_exists body quants)} 
-  | FORALL quants=form_args_list body=formula {popper (List.length quants); (List.fold_left make_forall body quants)} 
-  
-form_exp:
-  | i = INT {Term (Int i)}
-  | LEFT_PAREN MINUS t=form_term RIGHT_PAREN {Term (Formula.Minus t)}
-  | LEFT_PAREN PLUS t1=form_term t2=form_term RIGHT_PAREN {Term (Formula.Plus (t1, t2))}
-  | TRUE {Boolean True}
-  | FALSE {Boolean False}
-  | LEFT_PAREN AND f1=formula f2=formula RIGHT_PAREN {Boolean (And (f1, f2))}
-  | LEFT_PAREN OR f1=formula f2=formula RIGHT_PAREN {Boolean (Or (f1, f2))}
-  | LEFT_PAREN NOT f=formula RIGHT_PAREN {Boolean (Not f)}
-  | LEFT_PAREN IMPLIES f1=formula f2=formula RIGHT_PAREN {Boolean (Implies (f1, f2))}
-  | LEFT_PAREN EQUALS e1=form_exp e2=form_exp RIGHT_PAREN {
-    match e1, e2 with 
-    | Formula.Term t1, Formula.Term t2 -> Boolean (Equals (t1, t2))
-    | Boolean b1, Boolean b2 -> Boolean (Iff (b1, b2))
-    | _, _ -> raise Parse_Bad_Equals_Type_Mismatch}
-  | LEFT_PAREN LESS t1=form_term t2=form_term RIGHT_PAREN {Boolean (Less (t1, t2))}
-  | LEFT_PAREN LESS_EQUALS t1=form_term t2=form_term RIGHT_PAREN {Boolean (Or (Less (t1, t2), Equals (t1, t2)))}
-  | LEFT_PAREN GREATER t1=form_term t2=form_term RIGHT_PAREN {Boolean (Less (t2, t1))}
-  | LEFT_PAREN GREATER_EQUALS t1=form_term t2=form_term RIGHT_PAREN {Boolean (Or (Less (t2, t1), Equals (t2, t1)))}
-  | EXISTS quants=form_args_list body=formula {popper (List.length quants); Boolean (List.fold_left make_exists body quants)} 
-  | FORALL quants=form_args_list body=formula {popper (List.length quants); Boolean (List.fold_left make_forall body quants)} 
-  | s = STRING {if s = "e_t" then Term (TVar ET) 
-  else if s = "b_t" then Boolean (BVar BT)
-  else if (List.mem (BoolVar (B s)) !variable_context) then Boolean (BVar (B s)) 
-  else if (List.mem (TermVar (T s)) !variable_context) then Term (TVar (T s))
-  else raise Parse_Bad_Var}
-  
+  | EXISTS quants=form_args_list body=formula {(List.fold_left make_exists body quants)} 
+  | FORALL quants=form_args_list body=formula {(List.fold_left make_forall body quants)} 
 
-// Utilities for program parsing  
+// Utilities for program parsing 
+// Note, all returns will be functions that take in a lazy grammar. This prevents different parses from interfering with one another. 
 prog_num: 
-  | i = INT {if i = 0 then Zero else if i = 1 then One else raise Parse_Bad_Prog_Int}
-  | LEFT_PAREN PLUS n1=prog_num n2=prog_num RIGHT_PAREN {Plus (n1, n2)}
-  | LEFT_PAREN IF b=prog_bool THEN n1=prog_num ELSE n2=prog_num RIGHT_PAREN {ITE (b, n1, n2)}
-  | s = STRING {Var s}
-//   NNterm
+  | i = INT {fun _ -> if i = 0 then Zero else if i = 1 then One else raise Parse_Bad_Prog_Int}
+  | LEFT_PAREN PLUS n1=prog_num n2=prog_num RIGHT_PAREN {fun gram -> Plus ((n1 gram), (n2 gram))}
+  | LEFT_PAREN IF b=prog_bool THEN n1=prog_num ELSE n2=prog_num RIGHT_PAREN {fun gram -> ITE ((b gram), (n1 gram), (n2 gram))}
+  | NT_KWD s = STRING {fun gram -> (if (List.exists (fun n -> (Programs.NonTerminal.name n)= s) (Lazy.force gram).grammar_num)
+    then (NNTerm (List.find (fun n -> (Programs.NonTerminal.name n) = s) (Lazy.force gram).grammar_num)) 
+    else (NNTerm ({name=s; expansions=lazy []; strongest=None})))
+    }
+  | s = STRING {fun _ -> Var s}
 
 prog_bool:
- | TRUE {True}
- | FALSE {False}
- | LEFT_PAREN NOT b=prog_bool RIGHT_PAREN {Not b}
- | LEFT_PAREN OR b1=prog_bool b2=prog_bool RIGHT_PAREN {Or (b1, b2)}
- | LEFT_PAREN AND b1=prog_bool b2=prog_bool RIGHT_PAREN {And (b1, b2)}
- | LEFT_PAREN EQUALS n1=prog_num n2=prog_num RIGHT_PAREN {Equals (n1, n2)}
- | LEFT_PAREN LESS n1=prog_num n2=prog_num RIGHT_PAREN {Less (n1, n2)}
-//  BNterm
+ | TRUE {fun _ ->True}
+ | FALSE {fun _ -> False}
+ | LEFT_PAREN NOT b=prog_bool RIGHT_PAREN {fun gram -> Not (b gram)}
+ | LEFT_PAREN OR b1=prog_bool b2=prog_bool RIGHT_PAREN {fun gram -> Or ((b1 gram), (b2 gram))}
+ | LEFT_PAREN AND b1=prog_bool b2=prog_bool RIGHT_PAREN {fun gram -> And ((b1 gram), (b2 gram))}
+ | LEFT_PAREN EQUALS n1=prog_num n2=prog_num RIGHT_PAREN {fun gram -> Equals ((n1 gram), (n2 gram))}
+ | LEFT_PAREN LESS n1=prog_num n2=prog_num RIGHT_PAREN {fun gram -> Less ((n1 gram), (n2 gram))}
+ | NT_KWD s = STRING {fun gram -> (if (List.exists (fun b -> (Programs.NonTerminal.name b) = s) (Lazy.force gram).grammar_bool)
+    then BNTerm (List.find (fun b -> (Programs.NonTerminal.name b) = s) (Lazy.force gram).grammar_bool)
+    else BNTerm ({name=s; expansions=lazy []; strongest=None}))
+    }
 
 prog_stmt:
-  | LEFT_PAREN ASSIGN s=STRING t=prog_num RIGHT_PAREN {Assign (s, t)}
-  | LEFT_PAREN SEMICOLON s1=prog_stmt s2=prog_stmt RIGHT_PAREN {Seq (s1, s2)}
-  | LEFT_PAREN IF b=prog_bool THEN s1=prog_stmt ELSE s2=prog_stmt RIGHT_PAREN {ITE (b, s1, s2)}
-  | LEFT_PAREN WHILE b=prog_bool LEFT_FORM_DEMARCATOR f=formula RIGHT_FORM_DEMARCATOR s=prog_stmt RIGHT_PAREN {While (b, f, s)}
-//   SNTerm
-
+  | LEFT_PAREN ASSIGN s=STRING t=prog_num RIGHT_PAREN {fun gram -> Assign (s, (t gram))}
+  | LEFT_PAREN SEMICOLON s1=prog_stmt s2=prog_stmt RIGHT_PAREN {fun gram -> Seq ((s1 gram), (s2 gram))}
+  | LEFT_PAREN IF b=prog_bool THEN s1=prog_stmt ELSE s2=prog_stmt RIGHT_PAREN {fun gram -> ITE ((b gram), (s1 gram), (s2 gram))}
+  | LEFT_PAREN WHILE b=prog_bool LEFT_FORM_DEMARCATOR f=formula RIGHT_FORM_DEMARCATOR s=prog_stmt RIGHT_PAREN {fun gram -> While ((b gram), f, (s gram))}
+  | NT_KWD s = STRING {fun gram -> (if (List.exists (fun st -> (Programs.NonTerminal.name st) = s) (Lazy.force gram).grammar_stmt)
+    then SNTerm (List.find (fun st -> (Programs.NonTerminal.name st) = s) (Lazy.force gram).grammar_stmt)
+    else SNTerm ({name=s; expansions=lazy []; strongest=None}))
+    }
 
 program:
-    | INT_KWD n=prog_num {Numeric n}
-    | BOOL_KWD b=prog_bool {Boolean b}
-    | STMT_KWD p=prog_stmt {Stmt p}
+    | INT_KWD n=prog_num {fun gram -> Numeric (n gram)}
+    | BOOL_KWD b=prog_bool {fun gram -> Boolean (b gram)}
+    | STMT_KWD p=prog_stmt {fun gram -> Stmt (p gram)}
+
+// Parse Grammar
+grammar: 
+  | LEFT_SQUARE RIGHT_SQUARE {fun _ -> []}
+  | LEFT_SQUARE nt_list=nonterminal_defs RIGHT_SQUARE {fun gram -> (nt_list gram)}
+
+nonterminal_defs:
+  | n=nonterminal_def {fun gram -> [(n gram)]}
+  | n=nonterminal_def SEMICOLON n_list=nonterminal_defs {fun gram -> List.cons (n gram) (n_list gram)}
+
+nonterminal_def:
+  | INT_KWD name=STRING COLON expansions=prog_num_list COLON str=strongest {fun gram -> Numeric (NNTerm { name = name; expansions = lazy (expansions gram); strongest = str;})}
+  | BOOL_KWD name=STRING COLON expansions=prog_bool_list COLON str=strongest {fun gram -> Boolean (BNTerm { name = name; expansions = lazy (expansions gram); strongest = str;})}
+  | STMT_KWD name=STRING COLON expansions=prog_stmt_list COLON str=strongest {fun gram -> Stmt (SNTerm { name = name; expansions = lazy (expansions gram); strongest = str;})}
+
+prog_bool_list:
+  | LEFT_SQUARE RIGHT_SQUARE {fun _ -> []}
+  | LEFT_SQUARE b_list=prog_bools RIGHT_SQUARE {fun gram -> (b_list gram)}
+
+prog_bools:
+  | b=prog_bool {fun gram -> [(b gram)]}
+  | b=prog_bool COMMA b_list=prog_bools {fun gram -> List.cons (b gram) (b_list gram)}
+  
+prog_num_list:
+  | LEFT_SQUARE RIGHT_SQUARE {fun _ -> []}
+  | LEFT_SQUARE n_list=prog_nums RIGHT_SQUARE {fun gram -> (n_list gram)}
+
+prog_nums:
+  | n=prog_num {fun gram -> [(n gram)]}
+  | n=prog_num COMMA n_list=prog_nums {fun gram -> List.cons (n gram) (n_list gram)}
+
+prog_stmt_list:
+  | LEFT_SQUARE RIGHT_SQUARE {fun _ -> []}
+  | LEFT_SQUARE s_list=prog_stmts RIGHT_SQUARE {fun gram -> (s_list gram)}
+
+prog_stmts:
+  | s=prog_stmt {fun gram -> [(s gram)]}
+  | s=prog_stmt COMMA s_list=prog_stmts {fun gram -> List.cons (s gram) (s_list gram)}
+
+// Parse Nonterminal "Strongest"
+strongest:
+  | NONE_KWD {None}
+  | SOME_KWD LEFT_PAREN v_list=var_pairs_list COLON form=formula_or_hole RIGHT_PAREN {Some (v_list, form)}
+
+var_pairs_list:
+  | LEFT_SQUARE RIGHT_SQUARE {[]}
+  | LEFT_SQUARE v_list=var_pairs RIGHT_SQUARE {v_list}
+
+var_pairs:
+  | v=var_pair {[v]}
+  | v=var_pair SEMICOLON v_list=var_pairs {List.cons v v_list}
+
+var_pair:
+  | LEFT_PAREN INT_KWD ET COMMA INT_KWD s2=STRING RIGHT_PAREN {(TermVar ET), TermVar (T s2)}
+  | LEFT_PAREN INT_KWD s1=STRING COMMA INT_KWD ET RIGHT_PAREN {(TermVar (T s1), TermVar ET)}
+  | LEFT_PAREN INT_KWD s1=STRING COMMA INT_KWD s2=STRING RIGHT_PAREN {((TermVar (T s1)), (TermVar (T s2)))}
+  | LEFT_PAREN BOOL_KWD BT COMMA BOOL_KWD s2=STRING RIGHT_PAREN {(BoolVar BT, BoolVar (B s2))}
+  | LEFT_PAREN BOOL_KWD s1=STRING COMMA BOOL_KWD BT RIGHT_PAREN {((BoolVar (B s1)), BoolVar BT)}
+  | LEFT_PAREN BOOL_KWD s1=STRING COMMA BOOL_KWD s2=STRING RIGHT_PAREN {(BoolVar (B s1), BoolVar (B s2))}
+
+formula_or_hole:
+  | LEFT_PAREN HOLE_KWD COLON s=STRING vl=vars_list RIGHT_PAREN {Hole (s, vl)}
+  | f=formula {f}
+
+vars_list:
+  | LEFT_SQUARE RIGHT_SQUARE {[]}
+  | LEFT_SQUARE v_list=vars RIGHT_SQUARE {v_list}
+
+vars:
+  | v=var {[v]}
+  | v=var COMMA v_list=vars {List.cons v v_list}
+
+var:
+  | INT_KWD ET {Term (TVar ET)}
+  | BOOL_KWD BT {Logic.Formula.Boolean (BVar BT)}
+  | INT_KWD s=STRING {Term (TVar (T s))}
+  | BOOL_KWD s=STRING {Logic.Formula.Boolean (BVar (B s))}

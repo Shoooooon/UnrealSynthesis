@@ -349,17 +349,19 @@ let implicator_synth () =
           else
             let output = Arg.read_arg (Printf.sprintf "%s.out" filename_pref) in
             has_solutions := Some (Array.get output 0 = "(");
-            let syn_list =
-              List.map
-                (fun (name, body) ->
-                  (List.find (fun (h, _) -> h = name) hole_list, body))
-                (List.map
-                   (fun decl_str -> parse_func_decl decl_str)
-                   (Array.to_list
-                      (Array.sub output 1 (Array.length output - 2))))
-            in
-            synth_mapper := Some syn_list;
-            syn_list)
+            if Array.get output 0 = "(" then (
+              let syn_list =
+                List.map
+                  (fun (name, body) ->
+                    (List.find (fun (h, _) -> h = name) hole_list, body))
+                  (List.map
+                     (fun decl_str -> parse_func_decl decl_str)
+                     (Array.to_list
+                        (Array.sub output 1 (Array.length output - 2))))
+              in
+              synth_mapper := Some syn_list;
+              syn_list)
+            else [])
   in
 
   let implies hyp conc =
