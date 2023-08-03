@@ -1266,7 +1266,8 @@ let test_triple_parse =
     (ULSynth.Claimparser.ultriple ULSynth.Claimlexer.read
        (Lexing.from_string
           "[Bool B : [(= x 1), (or Nonterm B (= x 0))] : Some ([(Int e_t, Int \
-           e_t_2) ; (Bool b_t, Bool b_t_2)] : (Hole : hole [Bool b_t, Int x]))] {|(= x 1)|} Bool Nonterm B {|b_t|}"))
+           e_t_2) ; (Bool b_t, Bool b_t_2)] : (Hole : hole [Bool b_t, Int \
+           x]))] {|(= x 1)|} Bool Nonterm B {|b_t|}"))
     "Var: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [B MGF=(!(1 == x) \
      || b_t)] {(!(1 == x) || b_t)}] |- {(!(1 == x) || (x == 1))} x {(!(1 == x) \
      || (e_t == 1))}\n\
