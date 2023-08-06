@@ -1,16 +1,15 @@
 open Logic.Formula
 open Programs.Program
-open ULSynth.ProofRule
 open Programs.NonTerminal
 
 let check_proof_no_hole trip expected =
-  let pf = prove trip INVS_SPECIFIED in
-  let a = ruleApp_tostr pf in
+  let pf = ULSynth.ProofStrat.prove trip ULSynth.ProofStrat.INVS_SPECIFIED in
+  let a = ULSynth.ProofRule.ruleApp_tostr pf in
   if not (compare a expected = 0) then print_endline a
 
 let check_proof_with_hole trip expected_pf =
-  let pf = prove trip HOLE_SYNTH in
-  let pf_str = ruleApp_tostr pf in
+  let pf = ULSynth.ProofStrat.prove trip ULSynth.ProofStrat.HOLE_SYNTH in
+  let pf_str = ULSynth.ProofRule.ruleApp_tostr pf in
   if not (compare pf_str expected_pf = 0) then print_endline pf_str
 
 let test_axiom =
@@ -1235,15 +1234,15 @@ let test_rec_nonterm_with_hole =
 
 let test_triple_parse =
   print_endline
-    (trip_tostr
+    (ULSynth.ProofRule.trip_tostr
        (ULSynth.Claimparser.ultriple ULSynth.Claimlexer.read
           (Lexing.from_string "[] {|true|} Stmt (:= x 0) {|false|}")));
   print_endline
-    (trip_tostr
+    (ULSynth.ProofRule.trip_tostr
        (ULSynth.Claimparser.ultriple ULSynth.Claimlexer.read
           (Lexing.from_string "[] {|true|} Bool (or (= x x) (< 1 0)) {|false|}")));
   print_endline
-    (trip_tostr
+    (ULSynth.ProofRule.trip_tostr
        (ULSynth.Claimparser.ultriple ULSynth.Claimlexer.read
           (Lexing.from_string
              "[Int N : [1] : None] {|true|} Int (+ 0 1) {|false|}")));
