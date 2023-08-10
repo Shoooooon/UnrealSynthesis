@@ -1,12 +1,105 @@
 open Logic.Formula
 open Logic.Variable
 
-(* Utilities for discharging implications --
-   The idea will be to spawn processes to invoke Z3 or whichever solver.
-   We will generate a function that collects the process and makes sure it verified correctly, returning if not.
-   At the end of the proof construction, we will run these functions; if none of them error, the proof is correct.
-   Otherwise, an implication is incorrect (or a check did not complete).*)
+exception Unsupported_Formula_Constructor
 
+module type ImplicationHandler = sig
+  val implies : formula -> formula -> bool Lazy.t
+  val hole_values : ((string * variable list) * formula) list Lazy.t
+end
+
+(* Helper Functions *)
+(* GENERAL UTILITIES *)
+(* Determining which variables are free *)
+let rec free_vars_term term bound_vars =
+  match term with
+  | Int _ -> VS.empty
+  | TVar v ->
+      if VS.mem (TermVar v) bound_vars then VS.empty
+      else VS.singleton (TermVar v)
+  | ATVar (UnApp at) ->
+      if VS.mem (ATermVar at) bound_vars then VS.empty
+      else VS.singleton (ATermVar at)
+  | ATVar (App (at, i)) ->
+      VS.union
+        (if VS.mem (ATermVar at) bound_vars then VS.empty
+         else VS.singleton (ATermVar at))
+        (free_vars_term i bound_vars)
+  | Minus t -> free_vars_term t bound_vars
+  | Plus (t1, t2) ->
+      VS.union (free_vars_term t1 bound_vars) (free_vars_term t2 bound_vars)
+
+let rec free_vars form bound_vars =
+  match form with
+  | True -> VS.empty
+  | False -> VS.empty
+  | And (b1, b2) -> VS.union (free_vars b1 bound_vars) (free_vars b2 bound_vars)
+  | Or (b1, b2) -> VS.union (free_vars b1 bound_vars) (free_vars b2 bound_vars)
+  | Not b -> free_vars b bound_vars
+  | Implies (b1, b2) ->
+      VS.union (free_vars b1 bound_vars) (free_vars b2 bound_vars)
+  | BVar v ->
+      if VS.mem (BoolVar v) bound_vars then VS.empty
+      else VS.singleton (BoolVar v)
+  | ABVar (UnApp ab) ->
+      if VS.mem (ABoolVar ab) bound_vars then VS.empty
+      else VS.singleton (ABoolVar ab)
+  | ABVar (App (ab, i)) ->
+      if VS.mem (ABoolVar ab) bound_vars then free_vars_term i bound_vars
+      else VS.add (ABoolVar ab) (free_vars_term i bound_vars)
+  | Equals (t1, t2) ->
+      VS.union (free_vars_term t1 bound_vars) (free_vars_term t2 bound_vars)
+  | Less (t1, t2) ->
+      VS.union (free_vars_term t1 bound_vars) (free_vars_term t2 bound_vars)
+  | Iff (b1, b2) -> VS.union (free_vars b1 bound_vars) (free_vars b2 bound_vars)
+  | Exists (v, b) -> free_vars b (VS.add v bound_vars)
+  | Forall (v, b) -> free_vars b (VS.add v bound_vars)
+  | Hole (_, arg_list) ->
+      List.fold_left
+        (fun set arg -> VS.union set (free_vars_exp arg bound_vars))
+        VS.empty arg_list
+
+and free_vars_exp exp bound_vars =
+  match exp with
+  | Term t -> free_vars_term t bound_vars
+  | Boolean b -> free_vars b bound_vars
+
+(* Hole checking/manipulating functions *)
+let rec has_holes form =
+  match form with
+  | True -> false
+  | False -> false
+  | BVar _ -> false
+  | And (l, r) -> has_holes l || has_holes r
+  | Or (l, r) -> has_holes l || has_holes r
+  | Not _ -> false
+  | Implies (l, r) -> has_holes l || has_holes r
+  | Equals (_, _) -> false
+  | Less (_, _) -> false
+  | Iff (l, r) -> has_holes l || has_holes r
+  | Exists (_, body) -> has_holes body
+  | Forall (_, body) -> has_holes body
+  | Hole (_, _) -> true
+  | ABVar _ -> false
+
+let rec get_holes form =
+  match form with
+  | True -> []
+  | False -> []
+  | BVar _ -> []
+  | And (l, r) -> List.append (get_holes l) (get_holes r)
+  | Or (l, r) -> List.append (get_holes l) (get_holes r)
+  | Not _ -> []
+  | Implies (l, r) -> List.append (get_holes l) (get_holes r)
+  | Equals (_, _) -> []
+  | Less (_, _) -> []
+  | Iff (l, r) -> List.append (get_holes l) (get_holes r)
+  | Exists (_, body) -> get_holes body
+  | Forall (_, body) -> get_holes body
+  | Hole (h, vl) -> [ (h, vl) ]
+  | ABVar _ -> []
+
+(* Writing formulas to smt files *)
 let rec to_smt_helper_term term =
   match term with
   | Int i ->
@@ -15,6 +108,7 @@ let rec to_smt_helper_term term =
   | Minus t -> Printf.sprintf "(- %s)" (to_smt_helper_term t)
   | Plus (t1, t2) ->
       Printf.sprintf "(+ %s %s)" (to_smt_helper_term t1) (to_smt_helper_term t2)
+  | _ -> raise Unsupported_Formula_Constructor
 
 let rec to_smt_helper form =
   match form with
@@ -49,50 +143,10 @@ let rec to_smt_helper form =
   | Hole (s, arg_list) ->
       Printf.sprintf "(%s %s)" s
         (String.concat " " (List.map to_smt_helper_exp arg_list))
+  | _ -> raise Unsupported_Formula_Constructor
 
 and to_smt_helper_exp e =
   match e with Term t -> to_smt_helper_term t | Boolean b -> to_smt_helper b
-
-module VS = Set.Make (Logic.Variable)
-
-let rec free_vars_term term bound_vars =
-  match term with
-  | Int _ -> VS.empty
-  | TVar v ->
-      if VS.mem (TermVar v) bound_vars then VS.empty
-      else VS.singleton (TermVar v)
-  | Minus t -> free_vars_term t bound_vars
-  | Plus (t1, t2) ->
-      VS.union (free_vars_term t1 bound_vars) (free_vars_term t2 bound_vars)
-
-let rec free_vars form bound_vars =
-  match form with
-  | True -> VS.empty
-  | False -> VS.empty
-  | And (b1, b2) -> VS.union (free_vars b1 bound_vars) (free_vars b2 bound_vars)
-  | Or (b1, b2) -> VS.union (free_vars b1 bound_vars) (free_vars b2 bound_vars)
-  | Not b -> free_vars b bound_vars
-  | Implies (b1, b2) ->
-      VS.union (free_vars b1 bound_vars) (free_vars b2 bound_vars)
-  | BVar v ->
-      if VS.mem (BoolVar v) bound_vars then VS.empty
-      else VS.singleton (BoolVar v)
-  | Equals (t1, t2) ->
-      VS.union (free_vars_term t1 bound_vars) (free_vars_term t2 bound_vars)
-  | Less (t1, t2) ->
-      VS.union (free_vars_term t1 bound_vars) (free_vars_term t2 bound_vars)
-  | Iff (b1, b2) -> VS.union (free_vars b1 bound_vars) (free_vars b2 bound_vars)
-  | Exists (v, b) -> free_vars b (VS.add v bound_vars)
-  | Forall (v, b) -> free_vars b (VS.add v bound_vars)
-  | Hole (_, arg_list) ->
-      List.fold_left
-        (fun set arg -> VS.union set (free_vars_exp arg bound_vars))
-        VS.empty arg_list
-
-and free_vars_exp exp bound_vars =
-  match exp with
-  | Term t -> free_vars_term t bound_vars
-  | Boolean b -> free_vars b bound_vars
 
 let to_negated_smt form name =
   Printf.sprintf
@@ -104,54 +158,31 @@ let to_negated_smt form name =
          | BoolVar _ ->
              Printf.sprintf "%s(declare-const %s Bool)\n" str (var_tostr var)
          | TermVar _ ->
-             Printf.sprintf "%s(declare-const %s Int)\n" str (var_tostr var))
+             Printf.sprintf "%s(declare-const %s Int)\n" str (var_tostr var)
+         | _ -> raise Unsupported_Formula_Constructor)
        (free_vars form VS.empty) "")
     (to_smt_helper form)
 
-let parse_func_decl definition_str =
+(* Utilities for discharging implications --
+   The idea will be to spawn processes to invoke Z3 or whichever solver.
+   We will generate a function that collects the process and makes sure it verified correctly, returning if not.
+   At the end of the proof construction, we will run these functions; if none of them error, the proof is correct.
+   Otherwise, an implication is incorrect (or a check did not complete).*)
+
+(* Reading Synthesized formulas back in*)
+let parse_cvc5_func_decl definition_str =
   SMT2Parser.Parser.fun_decl SMT2Parser.Lexer.read
     (Lexing.from_string definition_str)
 
-(* Hole checking/manipulating functions *)
-let rec has_holes form =
-  match form with
-  | True -> false
-  | False -> false
-  | BVar _ -> false
-  | And (l, r) -> has_holes l || has_holes r
-  | Or (l, r) -> has_holes l || has_holes r
-  | Not _ -> false
-  | Implies (l, r) -> has_holes l || has_holes r
-  | Equals (_, _) -> false
-  | Less (_, _) -> false
-  | Iff (l, r) -> has_holes l || has_holes r
-  | Exists (_, body) -> has_holes body
-  | Forall (_, body) -> has_holes body
-  | Hole (_, _) -> true
-
-let rec get_holes form =
-  match form with
-  | True -> []
-  | False -> []
-  | BVar _ -> []
-  | And (l, r) -> List.append (get_holes l) (get_holes r)
-  | Or (l, r) -> List.append (get_holes l) (get_holes r)
-  | Not _ -> []
-  | Implies (l, r) -> List.append (get_holes l) (get_holes r)
-  | Equals (_, _) -> []
-  | Less (_, _) -> []
-  | Iff (l, r) -> List.append (get_holes l) (get_holes r)
-  | Exists (_, body) -> get_holes body
-  | Forall (_, body) -> get_holes body
-  | Hole (h, vl) -> [ (h, vl) ]
-
+(* FUNCITONS FOR DISCHARGING QUERIES *)
 (* Spawn a process to check the implication.
    Return a blocking function that confirms implication is valid. *)
 type file_pair = { name_num : int; form : formula }
 
-(* Returns a function that can be used to check implication.
-   Such a function must take a hyp:Formula and conclusion:Formula and return a bool lazy.*)
-let no_hole_implicator () =
+(* Sets up loggers and returns a function that can be used to check implication, assuming z3.
+   Logging discharged implications saves on repeat computations.
+   The implication function returned takes a hyp:formula and conclusion:formula and returns a bool lazy.*)
+let no_hole_simple_implicator_z3 () =
   let file_logger = ref [] and file_counter = ref 0 in
   let no_hole_implies hyp conc =
     (* Write SMT2 File *)
@@ -225,17 +256,18 @@ let no_hole_implicator () =
   in
   no_hole_implies
 
-(* Returns a function that can be used to check implication and a function to synthesize solutions to holes.
+(* Sets up loggers and returns a function that can be used to check implication and a lazy with synthesized solutions to holes.
+   Logging discharged implications saves on repeat computations and consolidates synthesis constraints.
    Such an implication checking function must take a hyp:Formula and conclusion:Formula and return a bool lazy.
-   The synthesis function expects no inputs, as they are stored in a persistent context carried along with the returned functions.*)
-let implicator_synth () =
+   TODO: Evaluating the synthesized holes breaks the environment; we may want to fix that so we can build gradual proofs? Or something?*)
+let implicator_hole_synth_cvc5 () =
   (* Create persistent context to track synthesis constraints. *)
   let constraint_logger = ref []
   and (synth_mapper : ((string * variable list) * formula) list option ref) =
     ref None
   and file_counter = ref 0
   and has_solutions = ref None
-  and no_hole_implies = no_hole_implicator () in
+  and no_hole_implies = no_hole_simple_implicator_z3 () in
   let synthesize_hole_values =
     lazy
       (match !synth_mapper with
@@ -298,7 +330,8 @@ let implicator_synth () =
                        (var_tostr var)
                  | TermVar _ ->
                      Printf.sprintf "%s(declare-var %s Int)\n" str
-                       (var_tostr var))
+                       (var_tostr var)
+                 | _ -> raise Unsupported_Formula_Constructor)
                f_vars "");
           (* Declare Holes to synthesize *)
           Printf.fprintf oc "%s\n"
@@ -313,7 +346,8 @@ let implicator_synth () =
                               | BoolVar _ ->
                                   Printf.sprintf "(%s Bool)" (var_tostr var)
                               | TermVar _ ->
-                                  Printf.sprintf "(%s Int)" (var_tostr var))
+                                  Printf.sprintf "(%s Int)" (var_tostr var)
+                              | _ -> raise Unsupported_Formula_Constructor)
                             vl)))
                   hole_list));
           (* Write constraints. *)
@@ -355,7 +389,7 @@ let implicator_synth () =
                   (fun (name, body) ->
                     (List.find (fun (h, _) -> h = name) hole_list, body))
                   (List.map
-                     (fun decl_str -> parse_func_decl decl_str)
+                     (fun decl_str -> parse_cvc5_func_decl decl_str)
                      (Array.to_list
                         (Array.sub output 1 (Array.length output - 2))))
               in
@@ -379,3 +413,13 @@ let implicator_synth () =
   in
 
   (implies, synthesize_hole_values)
+
+(* IMPLICATION MODULES *)
+module NoHoleSimpleImplicatorZ3 () : ImplicationHandler = struct
+  let implies = no_hole_simple_implicator_z3 ()
+  let hole_values = lazy []
+end
+
+module HoleSynthSimpleImplicatorCVC5 () : ImplicationHandler = struct
+  let implies, hole_values = implicator_hole_synth_cvc5 ()
+end

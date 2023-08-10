@@ -1,12 +1,14 @@
 open Logic.Formula
 open Logic.Variable
 
-(* Returns a function that can be used to check implication whether or not holes are present.
-   Allows separate instances for convenient memoization/maintaining state between invocations.
-   This will help disambiguate holes when we synthesize MGFs/invariants.
-   The first output is a function that takes (a,b) and checks if a->b lazily.
-   The second output gives you the values to fill any holes. *)
-val implicator_synth :
-  unit ->
-  (formula -> formula -> bool Lazy.t)
-  * ((string * variable list) * formula) list Lazy.t
+(* We have many different implication handlers depending on the solver you want to use and the structure of your formula.
+   The implies function registers and implication and returns a lazy bool telling you if the implication is true (or whether all implications registered so far are satisfiable when holes are involved).
+   The get_hole_values is a lazy of a map from holes to synthesized values for successfully synthesized holes.*)
+module type ImplicationHandler = sig
+  val implies : formula -> formula -> bool Lazy.t
+  val hole_values : ((string * variable list) * formula) list Lazy.t
+end
+
+(* IMPLICATION MODULES *)
+module NoHoleSimpleImplicatorZ3 () : ImplicationHandler
+module HoleSynthSimpleImplicatorCVC5 () : ImplicationHandler

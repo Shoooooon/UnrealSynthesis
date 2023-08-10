@@ -49,4 +49,5 @@ val ruleApp_tostr : ruleApp -> string
 val get_conclusion : ruleApp -> contextualized_triple
 
 (* Given a proof and a list of ways to fill holes, fills the holes accordingly.*)
-val plug_holes : ruleApp -> ((string * Logic.Variable.variable list) * formula) list -> ruleApp
+val plug_holes :
+  ruleApp -> ((string * Logic.Variable.variable list) * formula) list -> ruleApp

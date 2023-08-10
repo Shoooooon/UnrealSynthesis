@@ -12,4 +12,4 @@ let () =
             (ULSynth.Claimparser.ultriple ULSynth.Claimlexer.read
                (Lexing.from_string
                   (String.concat "\n" (Array.to_list (Arg.read_arg filename)))))
-            HOLE_SYNTH))
+            HOLE_SYNTH SIMPLE))

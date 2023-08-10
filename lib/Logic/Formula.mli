@@ -9,14 +9,18 @@ exception Incorrect_Implication of string
 type term =
   | Int of int
   | TVar of term_var
+  | ATVar of term_array_app
   | Minus of term
   | Plus of term * term
+
+and term_array_app = App of term_array_var * term | UnApp of term_array_var
 
 (* Boolean_exps are boolean-valued expressions, also called formulas. *)
 type boolean_exp =
   | True
   | False
   | BVar of bool_var
+  | ABVar of bool_array_app
   | And of boolean_exp * boolean_exp
   | Or of boolean_exp * boolean_exp
   | Not of boolean_exp
@@ -27,6 +31,8 @@ type boolean_exp =
   | Exists of variable * boolean_exp
   | Forall of variable * boolean_exp
   | Hole of string * exp list
+
+and bool_array_app = App of bool_array_var * term | UnApp of bool_array_var
 
 (* Exps are convenient to support holes and substitution. *)
 and exp = Term of term | Boolean of boolean_exp

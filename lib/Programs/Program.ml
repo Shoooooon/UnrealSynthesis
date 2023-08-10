@@ -1,6 +1,5 @@
 open NonTerminal
 open Logic.Variable
-module VS = Set.Make (Logic.Variable)
 
 (* TODO: Expand support for program constants *)
 type numeric_exp =
@@ -86,7 +85,6 @@ let rec reassigned_vars_helper prog examined =
   | Numeric _ -> VS.empty
   | Boolean _ -> VS.empty
   | Stmt (Assign (v, _)) -> VS.singleton (TermVar (T v))
-  (* | Stmt (Assign (_, _)) -> VS.empty *)
   | Stmt (Seq (s1, s2)) ->
       VS.union
         (reassigned_vars_helper (Stmt s1) examined)

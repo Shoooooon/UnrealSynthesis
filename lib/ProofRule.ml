@@ -259,5 +259,3 @@ let rec plug_holes (rule : ruleApp)
           List.map (fun pf -> plug_holes pf hole_map) pfs )
   | Adapt (ctrip, pf) ->
       Adapt (plug_holes_ctrip ctrip hole_map, plug_holes pf hole_map)
-
-
