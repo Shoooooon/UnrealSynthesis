@@ -12,3 +12,4 @@ end
 (* IMPLICATION MODULES *)
 module NoHoleSimpleImplicatorZ3 () : ImplicationHandler
 module HoleSynthSimpleImplicatorCVC5 () : ImplicationHandler
+module NoHoleVectorStateImplicatorVampire () : ImplicationHandler

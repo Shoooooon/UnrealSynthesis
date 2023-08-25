@@ -31,6 +31,12 @@ type boolean_exp =
   | Exists of variable * boolean_exp
   | Forall of variable * boolean_exp
   | Hole of string * exp list
+  (* T and T' are predicate transformers.
+     They should only be represented explicitly when applied to a hole.
+     For T, since we are mapping program variables to fresh variables and we want this to be reversible,
+     we maintain typed maps from the original vars to the new ones.*)
+  | T of boolean_exp * bool_array_var * term_array_var VMap_AT.t
+  | TPrime of boolean_exp
 
 and bool_array_app = App of bool_array_var * term | UnApp of bool_array_var
 
@@ -41,11 +47,25 @@ type formula = boolean_exp
 
 val form_tostr : formula -> string
 
-(* Given a formula, a variable, and an expression, returns a formula where occurrences of the variable inside the input formula are replaced by the input expression. *)
+(* Produces forall var. form if var appears in form. Else returns form. *)
+val forall: variable -> formula -> formula
+
+(* Given a formula, a variable, and an expression, returns a formula where occurrences of the variable inside the input formula are replaced by the input expression.
+   Note that subs will only overwrite free variables (e.g., (subs (a && \forall a. a) a b) -> b && \forall a. a *)
 val subs : formula -> variable -> exp -> formula
+
+(* Given a formula and a list of (variable, expression) pairs, returns a formula where occurrences of the variable inside the input formula are replaced by the input expression.
+   Note that subs will only overwrite free variables (e.g., (subs (a && \forall a. a) a b) -> b && \forall a. a *)
+val subs_several : formula -> (variable * exp) list -> formula
 
 (* Given a formula and a set of formula names to avoid, produces a name for a fresh variable. *)
 val fresh_var_name : formula -> string list -> string
 
 (* Given a formula anda map of holes to bodies, substitutes all holes in the original formula with the correct bodies.*)
 val sub_holes : formula -> ((string * variable list) * formula) list -> formula
+
+val t_transform :
+  formula ->
+  bool_array_var (*-> bool_array_var VMap_AB.t*) ->
+  term_array_var VMap_AT.t ->
+  formula

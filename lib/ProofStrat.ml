@@ -6,6 +6,7 @@ open ProofRule
 
 exception Bad_Strongest_Triple of string * string
 exception Unsupported_Var
+exception Unsupported_Mode
 
 type synthMode = HOLE_SYNTH | INVS_SPECIFIED
 type formMode = SIMPLE | VECTOR_STATE
@@ -153,9 +154,9 @@ let nonterm_handler_template reassigned_var_finder to_prog nterm ctrip
       in
       (* \forall y. Q_0[y/x][x/z] \rightarrow Q[y/x] *)
       let adapted_pre =
-        (* print_endline (String.concat "; " (List.map (fun (x, y, z) -> Printf.sprintf "(%s, %s, %s)" (var_tostr x) (var_tostr y) (var_tostr z)) xyz_list)); *)
+        (* adapted_pre_3 *)
         List.fold_left
-          (fun form (_, y, _) -> Forall (y, form))
+          (fun form (_, y, _) -> (forall y form))
           adapted_pre_3 xyz_list
       in
       let the_proof_before_adapt =
@@ -779,6 +780,144 @@ let ite_simple_template prog_setter b a1 a2
 let ite_simple_numeric = ite_simple_template (fun x -> Numeric x)
 let ite_simple_stmt = ite_simple_template (fun x -> Stmt x)
 
+let ite_vector_state_template prog_setter b a1 a2
+    (ctrip : contextualized_triple_no_pre) build_pf implies =
+  let trip = ctrip.trip in
+  (* Make a loop variable, b_loop. *)
+  let b_loop : bool_array_var = B (fresh_var_name trip.post []) in
+  (* Determine x, the variables whose values can be changed by executing the loop.
+     These should all be vectors. *)
+  (* TODO: Make this neater -- two mutated_vars? *)
+  let mutated_aterm_vars : term_array_var list =
+    List.map
+      (fun x ->
+        match x with
+        | TermVar ET -> (ET : term_array_var)
+        | TermVar (T x) -> (T x : term_array_var)
+        | _ -> raise Unsupported_Var)
+      (VS.elements (VS.remove (BoolVar BT) (reassigned_vars trip.prog)))
+  in
+  (* Construct term mappings (x -> y) and (x -> z) for later use. 
+     Note, we don't want variables introduced here to collide with separate fresh vars introduced later on (i.e., in the then/else analysis).
+     I think the easiest way to do that is to bar the substitution of bound variables (i.e., quantified ones).
+     In principle, we should never introduce a new, unbound variable in the precondition because {|P(new)|}S{|Q|} when Q does not reference new is the same as {|\forall new. P(new)|}S{|Q|}.
+     If there are weird overshadowing errors in the future though, this is a place to look.*)
+  let x2y_map =
+    mutated_aterm_vars
+    |> List.fold_left
+         (fun xymap x ->
+           List.cons
+             ( x,
+               (T
+                  (fresh_var_name trip.post
+                     (List.cons
+                        (var_tostr (ABoolVar b_loop))
+                        (List.map (fun (_, y) -> var_tostr (ATermVar y)) xymap)))
+                 : term_array_var) )
+             xymap)
+         []
+  in
+  let x2z_map =
+    mutated_aterm_vars
+    |> List.fold_left
+         (fun xzmap x ->
+           List.cons
+             ( x,
+               (T
+                  (fresh_var_name trip.post
+                     (List.cons
+                        (var_tostr (ABoolVar b_loop))
+                        (List.map
+                           (fun (_, y) -> var_tostr (ATermVar y))
+                           (List.append x2y_map xzmap))))
+                 : term_array_var) )
+             xzmap)
+         []
+  in
+
+  let else_hyp =
+    build_pf
+      {
+        context = ctrip.context;
+        trip =
+          {
+            prog = prog_setter a2;
+            post =
+              t_transform trip.post b_loop
+                (VMap_AT.of_seq (List.to_seq x2y_map));
+          };
+      }
+      implies
+  in
+  let then_hyp =
+    build_pf
+      {
+        context = ctrip.context;
+        trip =
+          {
+            prog = prog_setter a1;
+            post =
+              subs_several
+                (subs_several (get_conclusion else_hyp).trip.pre
+                   (List.map
+                      (fun (x, z) -> (ATermVar x, Term (ATVar (UnApp z))))
+                      x2z_map))
+                (List.map
+                   (fun (x, y) -> (ATermVar y, Term (ATVar (UnApp x))))
+                   x2y_map);
+          };
+      }
+      implies
+  in
+  (* TODO: Having b_loop as a pseudo-program variable causes problems when applying Adapt.
+     Instead, let's just subs b_t for b_loop. 
+     That way, we don't need to worry about quantifying out b_loop along with our other nonterminal expansion-dependent variables.*)
+  let guard_hyp =
+    build_pf
+      {
+        context = ctrip.context;
+        trip =
+          {
+            prog = Boolean b;
+            post =
+              (let post_p1 =
+                 subs_several (get_conclusion then_hyp).trip.pre
+                   (List.map
+                      (fun (x, z) -> (ATermVar z, Term (ATVar (UnApp x))))
+                      x2z_map)
+               in
+               subs post_p1 (ABoolVar b_loop) (Boolean (ABVar (UnApp BT))));
+               (* let i : term_var =
+                 T (fresh_var_name post_p1 [ var_tostr (ABoolVar b_loop) ])
+               in
+               Implies
+                 ( Forall
+                     ( TermVar i,
+                       Iff
+                         (ABVar (App (BT, TVar i)), ABVar (App (b_loop, TVar i)))
+                     ),
+                   post_p1 )); *)
+          };
+      }
+      implies
+  in 
+  ITE
+    ( {
+        context = ctrip.context;
+        trip =
+          {
+            pre = (get_conclusion guard_hyp).trip.pre;
+            prog = trip.prog;
+            post = trip.post;
+          };
+      },
+      guard_hyp,
+      then_hyp,
+      else_hyp )
+
+let ite_vector_state_numeric = ite_vector_state_template (fun x -> Numeric x)
+let ite_vector_state_stmt = ite_vector_state_template (fun x -> Stmt x)
+
 (* WHILE *)
 let while_simple b inv s (ctrip : contextualized_triple_no_pre) build_pf implies
     =
@@ -824,6 +963,139 @@ let while_simple b inv s (ctrip : contextualized_triple_no_pre) build_pf implies
           implies Logic.Formula.True (get_conclusion guard_hyp_raw).trip.pre ),
       body_hyp )
 
+(* let while_vector_state b inv s (ctrip : contextualized_triple_no_pre) build_pf implies
+       =
+     let trip = ctrip.trip in
+     let body_hyp =
+       build_pf
+         { context = ctrip.context; trip = { prog = Stmt s; post = inv } }
+         implies
+     in
+     let guard_hyp_raw =
+       build_pf
+         {
+           context = ctrip.context;
+           trip =
+             {
+               prog = Boolean b;
+               post =
+                 Implies
+                   ( inv,
+                     And
+                       ( Implies (Not (BVar BT), trip.post),
+                         Implies (BVar BT, (get_conclusion body_hyp).trip.pre) ) );
+             };
+         }
+         implies
+     in
+     While
+       ( {
+           context = ctrip.context;
+           trip = { pre = inv; prog = trip.prog; post = trip.post };
+         },
+         Weaken
+           ( {
+               context = ctrip.context;
+               trip =
+                 {
+                   pre = True;
+                   prog = Boolean b;
+                   post = (get_conclusion guard_hyp_raw).trip.post;
+                 };
+             },
+             guard_hyp_raw,
+             implies Logic.Formula.True (get_conclusion guard_hyp_raw).trip.pre ),
+         body_hyp )
+
+
+         let while_simple b inv s (ctrip : contextualized_triple_no_pre) build_pf implies
+         =
+       let trip = ctrip.trip in
+       let body_hyp =
+         build_pf
+           { context = ctrip.context; trip = { prog = Stmt s; post = inv } }
+           implies
+       in
+       let guard_hyp_raw =
+         build_pf
+           {
+             context = ctrip.context;
+             trip =
+               {
+                 prog = Boolean b;
+                 post =
+                   Implies
+                     ( inv,
+                       And
+                         ( Implies (Not (BVar BT), trip.post),
+                           Implies (BVar BT, (get_conclusion body_hyp).trip.pre) ) );
+               };
+           }
+           implies
+       in
+       While
+         ( {
+             context = ctrip.context;
+             trip = { pre = inv; prog = trip.prog; post = trip.post };
+           },
+           Weaken
+             ( {
+                 context = ctrip.context;
+                 trip =
+                   {
+                     pre = True;
+                     prog = Boolean b;
+                     post = (get_conclusion guard_hyp_raw).trip.post;
+                   };
+               },
+               guard_hyp_raw,
+               implies Logic.Formula.True (get_conclusion guard_hyp_raw).trip.pre ),
+           body_hyp )
+
+     let while_simple b inv s (ctrip : contextualized_triple_no_pre) build_pf implies
+     =
+   let trip = ctrip.trip in
+   let body_hyp =
+     build_pf
+       { context = ctrip.context; trip = { prog = Stmt s; post = inv } }
+       implies
+   in
+   let guard_hyp_raw =
+     build_pf
+       {
+         context = ctrip.context;
+         trip =
+           {
+             prog = Boolean b;
+             post =
+               Implies
+                 ( inv,
+                   And
+                     ( Implies (Not (BVar BT), trip.post),
+                       Implies (BVar BT, (get_conclusion body_hyp).trip.pre) ) );
+           };
+       }
+       implies
+   in
+   While
+     ( {
+         context = ctrip.context;
+         trip = { pre = inv; prog = trip.prog; post = trip.post };
+       },
+       Weaken
+         ( {
+             context = ctrip.context;
+             trip =
+               {
+                 pre = True;
+                 prog = Boolean b;
+                 post = (get_conclusion guard_hyp_raw).trip.post;
+               };
+           },
+           guard_hyp_raw,
+           implies Logic.Formula.True (get_conclusion guard_hyp_raw).trip.pre ),
+       body_hyp )
+*)
 let rec build_wpc_proof (ctrip : contextualized_triple_no_pre)
     (implies : formula -> formula -> bool Lazy.t) =
   match ctrip.trip.prog with
@@ -863,6 +1135,9 @@ let rec build_wpc_proof_vector_state (ctrip : contextualized_triple_no_pre)
   | Numeric (Var x) -> var_vector_state x ctrip
   | Numeric (Plus (t1, t2)) ->
       plus_vector_state t1 t2 ctrip build_wpc_proof_vector_state implies
+  | Numeric (ITE (b, s1, s2)) ->
+      ite_vector_state_numeric b s1 s2 ctrip build_wpc_proof_vector_state
+        implies
   | Numeric (NNTerm nterm) ->
       nonterm_handler_vector_state_numeric nterm ctrip
         build_wpc_proof_vector_state implies
@@ -885,6 +1160,8 @@ let rec build_wpc_proof_vector_state (ctrip : contextualized_triple_no_pre)
       assign_vector_state v n ctrip build_wpc_proof_vector_state implies
   | Stmt (Seq (s1, s2)) ->
       seq_vecor_state s1 s2 ctrip build_wpc_proof_vector_state implies
+  | Stmt (ITE (b, s1, s2)) ->
+      ite_vector_state_stmt b s1 s2 ctrip build_wpc_proof_vector_state implies
   | Stmt (SNTerm nterm) ->
       nonterm_handler_vector_state_stmt nterm ctrip build_wpc_proof_vector_state
         implies
@@ -896,9 +1173,14 @@ let prove (trip : triple) (smode : synthMode) (fmode : formMode) =
      Statefulness is necessary to gather implications, discharge them in parallel, etc.
      TODO: See if it makes more sense to do this with a continuation-passing-like scheme to fake statefulness. *)
   let module Imp =
-    (val match smode with
-         | HOLE_SYNTH -> (module Implications.HoleSynthSimpleImplicatorCVC5 ())
-         | INVS_SPECIFIED -> (module Implications.NoHoleSimpleImplicatorZ3 ())
+    (val match (smode, fmode) with
+         | HOLE_SYNTH, SIMPLE ->
+             (module Implications.HoleSynthSimpleImplicatorCVC5 ())
+         | INVS_SPECIFIED, SIMPLE ->
+             (module Implications.NoHoleSimpleImplicatorZ3 ())
+         | INVS_SPECIFIED, VECTOR_STATE ->
+             (module Implications.NoHoleVectorStateImplicatorVampire ())
+         | _ -> raise Unsupported_Mode
         : Implications.ImplicationHandler)
   in
   let build =
@@ -912,12 +1194,9 @@ let prove (trip : triple) (smode : synthMode) (fmode : formMode) =
       Imp.implies
   in
   let full_pf =
-    match fmode with
-    | SIMPLE ->
-        Weaken
-          ( { context = []; trip },
-            strongest,
-            Imp.implies trip.pre (get_conclusion strongest).trip.pre )
-    | VECTOR_STATE -> strongest
+    Weaken
+      ( { context = []; trip },
+        strongest,
+        Imp.implies trip.pre (get_conclusion strongest).trip.pre )
   in
   plug_holes full_pf (Lazy.force Imp.hole_values)

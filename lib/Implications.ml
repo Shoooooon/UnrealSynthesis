@@ -58,6 +58,14 @@ let rec free_vars form bound_vars =
       List.fold_left
         (fun set arg -> VS.union set (free_vars_exp arg bound_vars))
         VS.empty arg_list
+  | T (f, b_loop, t_map) ->
+      VS.add (ABoolVar b_loop)
+        (VS.union (free_vars f bound_vars)
+           (VMap_AT.bindings t_map |> List.split
+           |> (fun (a, b) -> List.append a b)
+           |> List.map (fun v -> ATermVar v)
+           |> VS.of_list))
+  | TPrime f -> free_vars f bound_vars
 
 and free_vars_exp exp bound_vars =
   match exp with
@@ -81,6 +89,8 @@ let rec has_holes form =
   | Forall (_, body) -> has_holes body
   | Hole (_, _) -> true
   | ABVar _ -> false
+  | T (f, _, _) -> has_holes f
+  | TPrime f -> has_holes f
 
 let rec get_holes form =
   match form with
@@ -98,7 +108,10 @@ let rec get_holes form =
   | Forall (_, body) -> get_holes body
   | Hole (h, vl) -> [ (h, vl) ]
   | ABVar _ -> []
+  | T (f, _, _) -> get_holes f
+  | TPrime f -> get_holes f
 
+(* WRITING *)
 (* Writing formulas to smt files *)
 let rec to_smt_helper_term term =
   match term with
@@ -148,7 +161,7 @@ let rec to_smt_helper form =
 and to_smt_helper_exp e =
   match e with Term t -> to_smt_helper_term t | Boolean b -> to_smt_helper b
 
-let to_negated_smt form name =
+let to_negated_smt_z3 form name =
   Printf.sprintf
     ";%s\n(set-info :status unknown)\n%s(assert\n(not\n%s\n)\n )\n(check-sat)"
     name
@@ -162,6 +175,104 @@ let to_negated_smt form name =
          | _ -> raise Unsupported_Formula_Constructor)
        (free_vars form VS.empty) "")
     (to_smt_helper form)
+
+(* Writing formulas to vampire files. *)
+let rec to_smt_helper_term_vamp term =
+  match term with
+  | Int i ->
+      if i < 0 then Printf.sprintf "(- %d)" (-1 * i) else Printf.sprintf "%d" i
+  | TVar v -> var_tostr (TermVar v)
+  | Minus t -> Printf.sprintf "(- %s)" (to_smt_helper_term_vamp t)
+  | Plus (t1, t2) ->
+      Printf.sprintf "(+ %s %s)"
+        (to_smt_helper_term_vamp t1)
+        (to_smt_helper_term_vamp t2)
+  | ATVar (App (at, i)) ->
+      Printf.sprintf "(select %s %s)" (var_tostr (ATermVar at))
+        (to_smt_helper_term_vamp i)
+  | _ -> raise Unsupported_Formula_Constructor
+
+let rec to_smt_helper_vamp form =
+  match form with
+  | True -> "true"
+  | False -> "false"
+  | And (b1, b2) ->
+      Printf.sprintf "(and %s %s)" (to_smt_helper_vamp b1)
+        (to_smt_helper_vamp b2)
+  | Or (b1, b2) ->
+      Printf.sprintf "(or %s %s)" (to_smt_helper_vamp b1)
+        (to_smt_helper_vamp b2)
+  | Not b -> Printf.sprintf "(not %s)" (to_smt_helper_vamp b)
+  | Implies (b1, b2) ->
+      Printf.sprintf "(=> %s %s)" (to_smt_helper_vamp b1)
+        (to_smt_helper_vamp b2)
+  | BVar v -> var_tostr (BoolVar v)
+  | ABVar (App (at, i)) ->
+      Printf.sprintf "(select %s %s)" (var_tostr (ABoolVar at))
+        (to_smt_helper_term_vamp i)
+  | Equals (t1, t2) ->
+      Printf.sprintf "(= %s %s)"
+        (to_smt_helper_term_vamp t1)
+        (to_smt_helper_term_vamp t2)
+  | Less (t1, t2) ->
+      Printf.sprintf "(< %s %s)"
+        (to_smt_helper_term_vamp t1)
+        (to_smt_helper_term_vamp t2)
+  | Iff (b1, b2) ->
+      Printf.sprintf "(= %s %s)" (to_smt_helper_vamp b1) (to_smt_helper_vamp b2)
+  | Exists (TermVar v, b) ->
+      Printf.sprintf "(exists ((%s Int) ) %s)" (var_tostr (TermVar v))
+        (to_smt_helper_vamp b)
+  | Exists (ATermVar v, b) ->
+      Printf.sprintf "(exists ((%s (Array Int Int)) ) %s)"
+        (var_tostr (ATermVar v)) (to_smt_helper_vamp b)
+  | Exists (BoolVar v, b) ->
+      Printf.sprintf "(exists ((%s Bool) ) %s)" (var_tostr (BoolVar v))
+        (to_smt_helper_vamp b)
+  | Exists (ABoolVar v, b) ->
+      Printf.sprintf "(exists ((%s (Array Int Bool)) ) %s)"
+        (var_tostr (ABoolVar v)) (to_smt_helper_vamp b)
+  | Forall (TermVar v, b) ->
+      Printf.sprintf "(forall ((%s Int) ) %s)" (var_tostr (TermVar v))
+        (to_smt_helper_vamp b)
+  | Forall (ATermVar v, b) ->
+      Printf.sprintf "(forall ((%s (Array Int Int)) ) %s)"
+        (var_tostr (ATermVar v)) (to_smt_helper_vamp b)
+  | Forall (BoolVar v, b) ->
+      Printf.sprintf "(forall ((%s Bool) ) %s)" (var_tostr (BoolVar v))
+        (to_smt_helper_vamp b)
+  | Forall (ABoolVar v, b) ->
+      Printf.sprintf "(forall ((%s (Array Int Bool)) ) %s)"
+        (var_tostr (ABoolVar v)) (to_smt_helper_vamp b)
+  | Hole (s, arg_list) ->
+      Printf.sprintf "(%s %s)" s
+        (String.concat " " (List.map to_smt_helper_exp_vamp arg_list))
+  | _ -> raise Unsupported_Formula_Constructor
+
+and to_smt_helper_exp_vamp e =
+  match e with
+  | Term t -> to_smt_helper_term_vamp t
+  | Boolean b -> to_smt_helper_vamp b
+
+let to_negated_smt_vampire form name =
+  Printf.sprintf
+    ";%s\n(set-info :status unknown)\n%s(assert\n(not\n%s\n)\n )\n(check-sat)"
+    name
+    (VS.fold
+       (fun var str ->
+         match var with
+         | TermVar _ ->
+             Printf.sprintf "%s(declare-const %s Int)\n" str (var_tostr var)
+         | ATermVar _ ->
+             Printf.sprintf "%s(declare-const %s (Array Int Int))\n" str
+               (var_tostr var)
+         | BoolVar _ ->
+             Printf.sprintf "%s(declare-const %s Bool)\n" str (var_tostr var)
+         | ABoolVar _ ->
+             Printf.sprintf "%s(declare-const %s (Array Int Bool))\n" str
+               (var_tostr var))
+       (free_vars form VS.empty) "")
+    (to_smt_helper_vamp form)
 
 (* Utilities for discharging implications --
    The idea will be to spawn processes to invoke Z3 or whichever solver.
@@ -213,7 +324,7 @@ let no_hole_simple_implicator_z3 () =
       in
       (* Set up the file and record in the structure. *)
       let oc = open_out (Printf.sprintf "%s.smt" filename_pref) in
-      Printf.fprintf oc "%s" (to_negated_smt (Implies (hyp, conc)) "test");
+      Printf.fprintf oc "%s" (to_negated_smt_z3 (Implies (hyp, conc)) "test");
       close_out oc;
       file_logger :=
         List.cons
@@ -414,6 +525,81 @@ let implicator_hole_synth_cvc5 () =
 
   (implies, synthesize_hole_values)
 
+(* Sets up loggers and returns a function that can be used to check implication, assuming vampire.
+   Logging discharged implications saves on repeat computations.
+   The implication function returned takes a hyp:formula and conclusion:formula and returns a bool lazy.*)
+let no_hole_vector_state_implicator_vampire () =
+  let file_logger = ref [] and file_counter = ref 0 in
+  let no_hole_implies hyp conc =
+    (* Write SMT2 File *)
+    (* If the file named by our fresh counter exists, skip the number. It could be important to someone else. *)
+    while Sys.file_exists (Printf.sprintf "Implication%d.smt" !file_counter) do
+      file_counter := !file_counter + 1
+    done;
+    (* If we have not dispatched a query for this implication... *)
+    if
+      not
+        (List.mem
+           (Implies (hyp, conc))
+           (List.map (fun a -> a.form) !file_logger))
+    then (
+      let filename_pref =
+        Printf.sprintf "Implication%d" !file_counter
+        (* String.map filename_map (form_tostr (Implies (hyp, conc))) *)
+      in
+      (* Set up the file and record in the structure. *)
+      let oc = open_out (Printf.sprintf "%s.smt" filename_pref) in
+      Printf.fprintf oc "%s"
+        (to_negated_smt_vampire (Implies (hyp, conc)) "test");
+      close_out oc;
+      file_logger :=
+        List.cons
+          { name_num = !file_counter; form = Implies (hyp, conc) }
+          !file_logger;
+      file_counter := !file_counter;
+      (* Fork and exec a query *)
+      let kid_pid = Unix.fork () in
+      if kid_pid = 0 then (
+        let fd =
+          Unix.openfile
+            (Printf.sprintf "%s.out" filename_pref)
+            [ O_CREAT; O_WRONLY ] 0
+        in
+        Unix.dup2 fd Unix.stdout;
+        Unix.execvp "vampire"
+          (Array.of_list
+             [
+               "vampire";
+               "-om";
+               "smtcomp";
+               "--input_syntax";
+               "smtlib2";
+               Printf.sprintf "%s.smt" filename_pref;
+             ]))
+      else
+        (* Return function that collects SMT result *)
+        lazy
+          (if Unix.waitpid [] kid_pid <> (kid_pid, WEXITED 0) then false
+           else
+             let f_channel = open_in (Printf.sprintf "%s.out" filename_pref) in
+             input_line f_channel = "unsat")
+      (* TODO: It might be good to have the below behavior be the default in both branches, but waitpid might be better. *)
+      (* If the query was already run, just read the result. *))
+    else
+      let name_num =
+        (List.find (fun a -> a.form = Implies (hyp, conc)) !file_logger)
+          .name_num
+      in
+      let filename_pref = Printf.sprintf "Implication%d" name_num in
+      lazy
+        (while not (Sys.file_exists (Printf.sprintf "%s.out" filename_pref)) do
+           Unix.sleep 1
+         done;
+         let f_channel = open_in (Printf.sprintf "%s.out" filename_pref) in
+         input_line f_channel = "unsat")
+  in
+  no_hole_implies
+
 (* IMPLICATION MODULES *)
 module NoHoleSimpleImplicatorZ3 () : ImplicationHandler = struct
   let implies = no_hole_simple_implicator_z3 ()
@@ -422,4 +608,9 @@ end
 
 module HoleSynthSimpleImplicatorCVC5 () : ImplicationHandler = struct
   let implies, hole_values = implicator_hole_synth_cvc5 ()
+end
+
+module NoHoleVectorStateImplicatorVampire () : ImplicationHandler = struct
+  let implies = no_hole_vector_state_implicator_vampire ()
+  let hole_values = lazy []
 end
