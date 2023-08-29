@@ -1321,7 +1321,113 @@ let test_triple_parse =
      => fresh2))} [B MGF=(!(1 == x) || b_t)] {b_t}\n\
      Weaken: {((Forall fresh2). ((!(1 == x) || fresh2) => fresh2))} [B \
      MGF=(!(1 == x) || b_t)] {b_t} -> {(x == 1)} [B MGF=(!(1 == x) || b_t)] \
-     {b_t}"
+     {b_t}";
+
+  check_proof_no_hole_vector_state
+    (ULSynth.Claimparser.ultriple ULSynth.Claimlexer.read
+       (Lexing.from_string
+          "[] {|forall ((i Int)) true |} Stmt (:= x 0) {|forall ((i Int)) (= \
+           x[i] 4)|}"))
+    "Zero: -> {((Forall i). (0 == 4))} 0 {((Forall i). (e_t[i] == 4))}\n\
+     Assign: {((Forall i). (0 == 4))} 0 {((Forall i). (e_t[i] == 4))} -> \
+     {((Forall i). (0 == 4))} (x := 0) {((Forall i). (x[i] == 4))}\n\
+     FALSE!!!Weaken: {((Forall i). (0 == 4))} (x := 0) {((Forall i). (x[i] == \
+     4))} -> {((Forall i). T)} (x := 0) {((Forall i). (x[i] == 4))}";
+
+  check_proof_no_hole_vector_state
+    (ULSynth.Claimparser.ultriple ULSynth.Claimlexer.read
+       (Lexing.from_string
+          "[Bool B : [(= x 1), (or Nonterm B (= x 0))] : Some ([(AInt e_t, \
+           AInt e_t_2) ; (ABool b_t, ABool b_t_2)] : (or b_t[0] (= 1 x[0])))] \
+           {|forall ((i Int)) (= x[i] 1)|} Bool Nonterm B {|forall ((i Int)) \
+           b_t[i]|}"))
+    "Var: -> [{((T && ((Forall i). (e_t[i] == e_t_2[i]))) && ((Forall i). \
+     (b_t[i] <-> b_t_2[i])))} [B MGF=(b_t[0] || !(1 == x[0]))] {(b_t[0] || !(1 \
+     == x[0]))}] |- {((x[0] == 1) || !(1 == x[0]))} x {((e_t[0] == 1) || !(1 \
+     == x[0]))}\n\
+     One: -> [{((T && ((Forall i). (e_t[i] == e_t_2[i]))) && ((Forall i). \
+     (b_t[i] <-> b_t_2[i])))} [B MGF=(b_t[0] || !(1 == x[0]))] {(b_t[0] || !(1 \
+     == x[0]))}] |- {((fresh1[0] == 1) || !(1 == x[0]))} 1 {((fresh1[0] == \
+     e_t[0]) || !(1 == x[0]))}\n\
+     Equals: [{((T && ((Forall i). (e_t[i] == e_t_2[i]))) && ((Forall i). \
+     (b_t[i] <-> b_t_2[i])))} [B MGF=(b_t[0] || !(1 == x[0]))] {(b_t[0] || !(1 \
+     == x[0]))}] |- {((x[0] == 1) || !(1 == x[0]))} x {((e_t[0] == 1) || !(1 \
+     == x[0]))}, [{((T && ((Forall i). (e_t[i] == e_t_2[i]))) && ((Forall i). \
+     (b_t[i] <-> b_t_2[i])))} [B MGF=(b_t[0] || !(1 == x[0]))] {(b_t[0] || !(1 \
+     == x[0]))}] |- {((fresh1[0] == 1) || !(1 == x[0]))} 1 {((fresh1[0] == \
+     e_t[0]) || !(1 == x[0]))} -> [{((T && ((Forall i). (e_t[i] == e_t_2[i]))) \
+     && ((Forall i). (b_t[i] <-> b_t_2[i])))} [B MGF=(b_t[0] || !(1 == x[0]))] \
+     {(b_t[0] || !(1 == x[0]))}] |- {((x[0] == 1) || !(1 == x[0]))} (x = 1) \
+     {(b_t[0] || !(1 == x[0]))}\n\
+     ApplyHP: -> [{((T && ((Forall i). (e_t[i] == e_t_2[i]))) && ((Forall i). \
+     (b_t[i] <-> b_t_2[i])))} [B MGF=(b_t[0] || !(1 == x[0]))] {(b_t[0] || !(1 \
+     == x[0]))}] |- {((T && ((Forall i). (e_t[i] == e_t_2[i]))) && ((Forall \
+     i). (b_t[i] <-> b_t_2[i])))} [B MGF=(b_t[0] || !(1 == x[0]))] {(b_t[0] || \
+     !(1 == x[0]))}\n\
+     Adapt: [{((T && ((Forall i). (e_t[i] == e_t_2[i]))) && ((Forall i). \
+     (b_t[i] <-> b_t_2[i])))} [B MGF=(b_t[0] || !(1 == x[0]))] {(b_t[0] || !(1 \
+     == x[0]))}] |- {((T && ((Forall i). (e_t[i] == e_t_2[i]))) && ((Forall \
+     i). (b_t[i] <-> b_t_2[i])))} [B MGF=(b_t[0] || !(1 == x[0]))] {(b_t[0] || \
+     !(1 == x[0]))} -> [{((T && ((Forall i). (e_t[i] == e_t_2[i]))) && \
+     ((Forall i). (b_t[i] <-> b_t_2[i])))} [B MGF=(b_t[0] || !(1 == x[0]))] \
+     {(b_t[0] || !(1 == x[0]))}] |- {((Forall fresh2). ((fresh2[0] || !(1 == \
+     x[0])) => ((fresh2[0] || (x[0] == 0)) || !(1 == x[0]))))} [B MGF=(b_t[0] \
+     || !(1 == x[0]))] {((b_t[0] || (x[0] == 0)) || !(1 == x[0]))}\n\
+     Var: -> [{((T && ((Forall i). (e_t[i] == e_t_2[i]))) && ((Forall i). \
+     (b_t[i] <-> b_t_2[i])))} [B MGF=(b_t[0] || !(1 == x[0]))] {(b_t[0] || !(1 \
+     == x[0]))}] |- {((fresh1[0] || (x[0] == 0)) || !(1 == x[0]))} x \
+     {((fresh1[0] || (e_t[0] == 0)) || !(1 == x[0]))}\n\
+     Zero: -> [{((T && ((Forall i). (e_t[i] == e_t_2[i]))) && ((Forall i). \
+     (b_t[i] <-> b_t_2[i])))} [B MGF=(b_t[0] || !(1 == x[0]))] {(b_t[0] || !(1 \
+     == x[0]))}] |- {((fresh1[0] || (fresh2[0] == 0)) || !(1 == x[0]))} 0 \
+     {((fresh1[0] || (fresh2[0] == e_t[0])) || !(1 == x[0]))}\n\
+     Equals: [{((T && ((Forall i). (e_t[i] == e_t_2[i]))) && ((Forall i). \
+     (b_t[i] <-> b_t_2[i])))} [B MGF=(b_t[0] || !(1 == x[0]))] {(b_t[0] || !(1 \
+     == x[0]))}] |- {((fresh1[0] || (x[0] == 0)) || !(1 == x[0]))} x \
+     {((fresh1[0] || (e_t[0] == 0)) || !(1 == x[0]))}, [{((T && ((Forall i). \
+     (e_t[i] == e_t_2[i]))) && ((Forall i). (b_t[i] <-> b_t_2[i])))} [B \
+     MGF=(b_t[0] || !(1 == x[0]))] {(b_t[0] || !(1 == x[0]))}] |- {((fresh1[0] \
+     || (fresh2[0] == 0)) || !(1 == x[0]))} 0 {((fresh1[0] || (fresh2[0] == \
+     e_t[0])) || !(1 == x[0]))} -> [{((T && ((Forall i). (e_t[i] == \
+     e_t_2[i]))) && ((Forall i). (b_t[i] <-> b_t_2[i])))} [B MGF=(b_t[0] || \
+     !(1 == x[0]))] {(b_t[0] || !(1 == x[0]))}] |- {((fresh1[0] || (x[0] == \
+     0)) || !(1 == x[0]))} (x = 0) {((fresh1[0] || b_t[0]) || !(1 == x[0]))}\n\
+     Or: [{((T && ((Forall i). (e_t[i] == e_t_2[i]))) && ((Forall i). (b_t[i] \
+     <-> b_t_2[i])))} [B MGF=(b_t[0] || !(1 == x[0]))] {(b_t[0] || !(1 == \
+     x[0]))}] |- {((Forall fresh2). ((fresh2[0] || !(1 == x[0])) => \
+     ((fresh2[0] || (x[0] == 0)) || !(1 == x[0]))))} [B MGF=(b_t[0] || !(1 == \
+     x[0]))] {((b_t[0] || (x[0] == 0)) || !(1 == x[0]))}, [{((T && ((Forall \
+     i). (e_t[i] == e_t_2[i]))) && ((Forall i). (b_t[i] <-> b_t_2[i])))} [B \
+     MGF=(b_t[0] || !(1 == x[0]))] {(b_t[0] || !(1 == x[0]))}] |- {((fresh1[0] \
+     || (x[0] == 0)) || !(1 == x[0]))} (x = 0) {((fresh1[0] || b_t[0]) || !(1 \
+     == x[0]))} -> [{((T && ((Forall i). (e_t[i] == e_t_2[i]))) && ((Forall \
+     i). (b_t[i] <-> b_t_2[i])))} [B MGF=(b_t[0] || !(1 == x[0]))] {(b_t[0] || \
+     !(1 == x[0]))}] |- {((Forall fresh2). ((fresh2[0] || !(1 == x[0])) => \
+     ((fresh2[0] || (x[0] == 0)) || !(1 == x[0]))))} ([B MGF=(b_t[0] || !(1 == \
+     x[0]))] || (x = 0)) {(b_t[0] || !(1 == x[0]))}\n\
+     HP: [{((T && ((Forall i). (e_t[i] == e_t_2[i]))) && ((Forall i). (b_t[i] \
+     <-> b_t_2[i])))} [B MGF=(b_t[0] || !(1 == x[0]))] {(b_t[0] || !(1 == \
+     x[0]))}] |- {((x[0] == 1) || !(1 == x[0]))} (x = 1) {(b_t[0] || !(1 == \
+     x[0]))}, [{((T && ((Forall i). (e_t[i] == e_t_2[i]))) && ((Forall i). \
+     (b_t[i] <-> b_t_2[i])))} [B MGF=(b_t[0] || !(1 == x[0]))] {(b_t[0] || !(1 \
+     == x[0]))}] |- {((Forall fresh2). ((fresh2[0] || !(1 == x[0])) => \
+     ((fresh2[0] || (x[0] == 0)) || !(1 == x[0]))))} ([B MGF=(b_t[0] || !(1 == \
+     x[0]))] || (x = 0)) {(b_t[0] || !(1 == x[0]))} -> {((T && ((x[0] == 1) || \
+     !(1 == x[0]))) && ((Forall fresh2). ((fresh2[0] || !(1 == x[0])) => \
+     ((fresh2[0] || (x[0] == 0)) || !(1 == x[0])))))} [B MGF=(b_t[0] || !(1 == \
+     x[0]))] {(b_t[0] || !(1 == x[0]))}\n\
+     Weaken: {((T && ((x[0] == 1) || !(1 == x[0]))) && ((Forall fresh2). \
+     ((fresh2[0] || !(1 == x[0])) => ((fresh2[0] || (x[0] == 0)) || !(1 == \
+     x[0])))))} [B MGF=(b_t[0] || !(1 == x[0]))] {(b_t[0] || !(1 == x[0]))} -> \
+     {((T && ((Forall i). (e_t[i] == e_t_2[i]))) && ((Forall i). (b_t[i] <-> \
+     b_t_2[i])))} [B MGF=(b_t[0] || !(1 == x[0]))] {(b_t[0] || !(1 == x[0]))}\n\
+     Adapt: {((T && ((Forall i). (e_t[i] == e_t_2[i]))) && ((Forall i). \
+     (b_t[i] <-> b_t_2[i])))} [B MGF=(b_t[0] || !(1 == x[0]))] {(b_t[0] || !(1 \
+     == x[0]))} -> {((Forall fresh2). ((fresh2[0] || !(1 == x[0])) => \
+     fresh2[0]))} [B MGF=(b_t[0] || !(1 == x[0]))] {b_t[0]}\n\
+     Weaken: {((Forall fresh2). ((fresh2[0] || !(1 == x[0])) => fresh2[0]))} \
+     [B MGF=(b_t[0] || !(1 == x[0]))] {b_t[0]} -> {(x[0] == 1)} [B MGF=(b_t[0] \
+     || !(1 == x[0]))] {b_t[0]}"
 
 let test_axiom_vector_states =
   check_proof_no_hole_vector_state
@@ -2481,9 +2587,9 @@ let test_ITE_vector_states =
      (x := 0) else (x := 1)) {((Exists i). ((Exists j). ((0 == x[i]) && (1 == \
      x[j]))))} -> {((Exists i). ((Exists j). ((0 == x[i]) && (1 == x[j]))))} \
      (if (1 = x) then (x := 0) else (x := 1)) {((Exists i). ((Exists j). ((0 \
-     == x[i]) && (1 == x[j]))))}";
+     == x[i]) && (1 == x[j]))))}"
 (* Example 5.1 -- Commented out bc Vampire solver not powerful enough to solve, so it hangs until timeout. *)
- let rec n =
+(* let rec n =
      {
        name = "N";
        expansions = lazy [ One; Plus (One, NNTerm n) ];
@@ -2546,7 +2652,7 @@ let test_ITE_vector_states =
                   ( ATVar (App (T "y", TVar (T "i"))),
                     ATVar (App (T "x", TVar (T "i"))) )) );
      }
-     "Var: -> {((Forall fresh4 ). ((Forall fresh5). (((Exists n). ((Forall i)"
+     "Var: -> {((Forall fresh4 ). ((Forall fresh5). (((Exists n). ((Forall i)"*)
 
 let test_stmt_vector_states =
   (* Assign *)

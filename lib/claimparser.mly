@@ -3,6 +3,7 @@
     open Logic.Variable
     open Programs.Program
     exception Parse_Bad_Prog_Int
+    exception Parse_Bad_Formula
     let make_exists body quant = Formula.Exists (quant, body)
     let make_forall body quant = Formula.Forall (quant, body)
 %}
@@ -10,7 +11,9 @@
 %token <int> INT
 %token <string> STRING
 %token INT_KWD
+%token ARRAY_INT_KWD
 %token BOOL_KWD
+%token ARRAY_BOOL_KWD
 %token STMT_KWD
 %token NT_KWD
 %token NONE_KWD
@@ -78,15 +81,25 @@ form_args_list:
   |LEFT_PAREN args=form_args RIGHT_PAREN {args}
 
 form_args:
-  |LEFT_PAREN s=STRING INT_KWD RIGHT_PAREN {[Variable.TermVar (T s)]}
-  |LEFT_PAREN s=STRING BOOL_KWD RIGHT_PAREN {[Variable.BoolVar (B s)]}
-  |LEFT_PAREN s=STRING INT_KWD RIGHT_PAREN args=form_args {List.cons (Variable.TermVar (T s)) args}
-  |LEFT_PAREN s=STRING BOOL_KWD RIGHT_PAREN args=form_args {List.cons (Variable.BoolVar (B s)) args}
+  |a=form_arg {[a]}
+  |arg=form_arg args=form_args {List.cons arg args}
+
+form_arg: 
+  | LEFT_PAREN BT INT_KWD RIGHT_PAREN {raise Parse_Bad_Formula}
+  | LEFT_PAREN ET ARRAY_INT_KWD RIGHT_PAREN {raise Parse_Bad_Formula}
+  | LEFT_PAREN BT BOOL_KWD RIGHT_PAREN {raise Parse_Bad_Formula}
+  | LEFT_PAREN BT ARRAY_BOOL_KWD RIGHT_PAREN {raise Parse_Bad_Formula}
+  | LEFT_PAREN s=STRING INT_KWD RIGHT_PAREN {Variable.TermVar (T s)}
+  | LEFT_PAREN s=STRING BOOL_KWD RIGHT_PAREN {Variable.BoolVar (B s)}
+  | LEFT_PAREN s=STRING ARRAY_INT_KWD RIGHT_PAREN {Variable.ATermVar (T s)}
+  | LEFT_PAREN s=STRING ARRAY_BOOL_KWD RIGHT_PAREN {Variable.ABoolVar (B s)}
 
 form_term:
   | i = INT {Int i}
   | ET {TVar ET}
+  | ET LEFT_SQUARE index=form_term RIGHT_SQUARE {ATVar (App (ET, index))}
   | s = STRING {TVar (T s)}
+  | s = STRING LEFT_SQUARE index=form_term RIGHT_SQUARE {ATVar (App (T s, index))}
   | LEFT_PAREN MINUS t=form_term RIGHT_PAREN {Formula.Minus t}
   | LEFT_PAREN PLUS t1=form_term t2=form_term RIGHT_PAREN {Formula.Plus (t1, t2)}
 
@@ -94,7 +107,9 @@ formula:
   | TRUE {True}
   | FALSE {False}
   | BT {BVar BT}
+  | BT LEFT_SQUARE index=form_term RIGHT_SQUARE {ABVar (App (BT, index))}
   | s = STRING {BVar (B s)}
+  | s = STRING LEFT_SQUARE index=form_term RIGHT_SQUARE {ABVar (App (B s, index))}
   | LEFT_PAREN AND f1=formula f2=formula RIGHT_PAREN {And (f1, f2)}
   | LEFT_PAREN OR f1=formula f2=formula RIGHT_PAREN {Or (f1, f2)}
   | LEFT_PAREN NOT f=formula RIGHT_PAREN {Not f}
@@ -200,13 +215,23 @@ var_pairs:
   | v=var_pair SEMICOLON v_list=var_pairs {List.cons v v_list}
 
 var_pair:
-  | LEFT_PAREN INT_KWD ET COMMA INT_KWD s2=STRING RIGHT_PAREN {(TermVar ET), TermVar (T s2)}
-  | LEFT_PAREN INT_KWD s1=STRING COMMA INT_KWD ET RIGHT_PAREN {(TermVar (T s1), TermVar ET)}
-  | LEFT_PAREN INT_KWD s1=STRING COMMA INT_KWD s2=STRING RIGHT_PAREN {((TermVar (T s1)), (TermVar (T s2)))}
-  | LEFT_PAREN BOOL_KWD BT COMMA BOOL_KWD s2=STRING RIGHT_PAREN {(BoolVar BT, BoolVar (B s2))}
-  | LEFT_PAREN BOOL_KWD s1=STRING COMMA BOOL_KWD BT RIGHT_PAREN {((BoolVar (B s1)), BoolVar BT)}
-  | LEFT_PAREN BOOL_KWD s1=STRING COMMA BOOL_KWD s2=STRING RIGHT_PAREN {(BoolVar (B s1), BoolVar (B s2))}
+  | LEFT_PAREN v1=var COMMA v2=var RIGHT_PAREN {match (v1, v2) with
+    | (TermVar _, TermVar _) -> (v1, v2)
+    | (ATermVar _, ATermVar _) -> (v1, v2)
+    | (BoolVar _, BoolVar _) -> (v1, v2)
+    | (ABoolVar _, ABoolVar _) -> (v1, v2)
+    | _ -> raise Parse_Bad_Prog_Int}
 
+var:
+  | INT_KWD s=STRING {TermVar (T s)}
+  | INT_KWD ET {TermVar ET}
+  | ARRAY_INT_KWD s=STRING {ATermVar (T s)}
+  | ARRAY_INT_KWD ET {ATermVar ET}
+  | BOOL_KWD s=STRING {BoolVar (B s)}
+  | BOOL_KWD BT {BoolVar BT}
+  | ARRAY_BOOL_KWD s1=STRING {ABoolVar (B s1)}
+  | ARRAY_BOOL_KWD BT {ABoolVar (BT)}
+  
 formula_or_hole:
   | LEFT_PAREN HOLE_KWD COLON s=STRING vl=vars_list RIGHT_PAREN {Hole (s, vl)}
   | f=formula {f}
@@ -216,11 +241,15 @@ vars_list:
   | LEFT_SQUARE v_list=vars RIGHT_SQUARE {v_list}
 
 vars:
-  | v=var {[v]}
-  | v=var COMMA v_list=vars {List.cons v v_list}
+  | v=var_as_exp {[v]}
+  | v=var_as_exp COMMA v_list=vars {List.cons v v_list}
 
-var:
+var_as_exp:
   | INT_KWD ET {Term (TVar ET)}
   | BOOL_KWD BT {Logic.Formula.Boolean (BVar BT)}
   | INT_KWD s=STRING {Term (TVar (T s))}
   | BOOL_KWD s=STRING {Logic.Formula.Boolean (BVar (B s))}
+  | ARRAY_INT_KWD ET {Term (ATVar (UnApp ET))}
+  | ARRAY_BOOL_KWD BT {Logic.Formula.Boolean (ABVar (UnApp BT))}
+  | ARRAY_INT_KWD s=STRING {Term (ATVar (UnApp (T s)))}
+  | ARRAY_BOOL_KWD s=STRING {Logic.Formula.Boolean (ABVar (UnApp (B s)))}

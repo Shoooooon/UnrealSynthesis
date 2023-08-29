@@ -1,8 +1,20 @@
 ## How to run
 
-To run, make sure z3 and cvc5 are installed and type the following:
+To run, make sure z3, cvc5, and vampire are installed and callable from the command line as "z3", "cvc5", and "vampire" respectively. Then type the following:
 
-> dune exec ULSynth \<filename\>
+> dune exec -- ULSynth \<filename\>
+
+If you want to prove a triple over vector-states, set the -vectors flag before the filename:
+
+> dune exec -- ULSynth -vectors \<filename\>
+
+If you will need to synthesize holes (e.g., nonterminal summaries), set the -holes flag before the filename:
+
+> dune exec -- ULSynth -holes \<filename\>
+
+For help, type the following:
+
+> dune exec -- ULSynth --help
 
 Note the file passed should contain the triple you are trying to synthesize and the corresponding grammar. 
 

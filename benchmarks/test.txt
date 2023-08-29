@@ -1,0 +1,3 @@
+[Bool B : [(= x 1), (or Nonterm B (= x 0))] : 
+    Some ([(AInt e_t, AInt e_t_2) ; (ABool b_t, ABool b_t_2)] : (or b_t[0] (not (= 1 x[0]))))] 
+    {|(= x[0] 1)|} Bool Nonterm B {|b_t[0]|}

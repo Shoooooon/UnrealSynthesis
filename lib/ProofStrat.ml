@@ -61,7 +61,10 @@ let nonterm_handler_template reassigned_var_finder to_prog nterm ctrip
           TODO: Move this check to intake of non-terminal at some point. *)
       VS.iter
         (fun var ->
-          if List.mem var (List.map (fun (a, _) -> a) var_pairs_list) then ()
+          if
+            List.mem (var_tostr var)
+              (List.map (fun (a, _) -> var_tostr a) var_pairs_list)
+          then ()
           else
             raise
               (Bad_Strongest_Triple
@@ -156,7 +159,7 @@ let nonterm_handler_template reassigned_var_finder to_prog nterm ctrip
       let adapted_pre =
         (* adapted_pre_3 *)
         List.fold_left
-          (fun form (_, y, _) -> (forall y form))
+          (fun form (_, y, _) -> forall y form)
           adapted_pre_3 xyz_list
       in
       let the_proof_before_adapt =
@@ -797,7 +800,7 @@ let ite_vector_state_template prog_setter b a1 a2
         | _ -> raise Unsupported_Var)
       (VS.elements (VS.remove (BoolVar BT) (reassigned_vars trip.prog)))
   in
-  (* Construct term mappings (x -> y) and (x -> z) for later use. 
+  (* Construct term mappings (x -> y) and (x -> z) for later use.
      Note, we don't want variables introduced here to collide with separate fresh vars introduced later on (i.e., in the then/else analysis).
      I think the easiest way to do that is to bar the substitution of bound variables (i.e., quantified ones).
      In principle, we should never introduce a new, unbound variable in the precondition because {|P(new)|}S{|Q|} when Q does not reference new is the same as {|\forall new. P(new)|}S{|Q|}.
@@ -870,7 +873,7 @@ let ite_vector_state_template prog_setter b a1 a2
       implies
   in
   (* TODO: Having b_loop as a pseudo-program variable causes problems when applying Adapt.
-     Instead, let's just subs b_t for b_loop. 
+     Instead, let's just subs b_t for b_loop.
      That way, we don't need to worry about quantifying out b_loop along with our other nonterminal expansion-dependent variables.*)
   let guard_hyp =
     build_pf
@@ -887,7 +890,7 @@ let ite_vector_state_template prog_setter b a1 a2
                       x2z_map)
                in
                subs post_p1 (ABoolVar b_loop) (Boolean (ABVar (UnApp BT))));
-               (* let i : term_var =
+            (* let i : term_var =
                  T (fresh_var_name post_p1 [ var_tostr (ABoolVar b_loop) ])
                in
                Implies
@@ -900,7 +903,7 @@ let ite_vector_state_template prog_setter b a1 a2
           };
       }
       implies
-  in 
+  in
   ITE
     ( {
         context = ctrip.context;

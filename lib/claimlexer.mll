@@ -18,6 +18,8 @@ rule read =
   | int      { INT (int_of_string (Lexing.lexeme lexbuf)) }
   | "Int" {INT_KWD}
   | "Bool" {BOOL_KWD} 
+  | "AInt" {ARRAY_INT_KWD}
+  | "ABool" {ARRAY_BOOL_KWD} 
   | "Stmt" {STMT_KWD} 
   | "Nonterm" {NT_KWD}
   | "None" {NONE_KWD}

@@ -1,6 +1,7 @@
 open Variable
 
 exception Subs_Type_Mismatch
+
 (* exception Subs_Exp_In_Quant *)
 exception Set_Index_Inside_Predicate
 exception Applying_Transformation_On_Incomplete_Index
@@ -95,7 +96,6 @@ let rec form_tostr form =
 and exp_tostr exp =
   match exp with Term t -> term_tostr t | Boolean b -> form_tostr b
 
-
 (* Forall constructors that do not quantify over the variable if it is never used. Also, some helpers.*)
 let rec is_new_var exp var_str =
   match exp with
@@ -134,10 +134,10 @@ let rec is_new_var exp var_str =
             (VMap_AB.bindings b_map) *)
       && is_new_var (Boolean (ABVar (UnApp b_loop))) var_str
       && List.for_all
-            (fun (t_old, t_new) ->
-              var_str <> var_tostr (ATermVar t_old)
-              && var_str <> var_tostr (ATermVar t_new))
-            (VMap_AT.bindings t_map)
+           (fun (t_old, t_new) ->
+             var_str <> var_tostr (ATermVar t_old)
+             && var_str <> var_tostr (ATermVar t_new))
+           (VMap_AT.bindings t_map)
   | Boolean (TPrime f) -> is_new_var (Boolean f) var_str
   | Term (Int _) -> true
   | Term (TVar v) -> var_tostr (TermVar v) <> var_str
@@ -158,12 +158,9 @@ let fresh_var_name form exclude_set =
   done;
   (* Printf.printf "%s: fresh%d\n" (form_tostr form) !i; *)
   Printf.sprintf "fresh%d" !i
-  
-let forall v form =
-  if is_new_var (Boolean form) (var_tostr v) then
-    form
-  else Forall (v, form) 
 
+let forall v form =
+  if is_new_var (Boolean form) (var_tostr v) then form else Forall (v, form)
 
 (* Predicate transformers and associated helper functions.*)
 (* Given a term, collects the set of all terms that appear as indices. *)
@@ -395,24 +392,24 @@ let rec subs form oldv newe =
       Less (subs_term_vector_state t1 old t, subs_term_vector_state t2 old t)
   | Less (_, _), _, _ -> form
   | Iff (b1, b2), _, _ -> Iff (subs b1 oldv newe, subs b2 oldv newe)
-  | Forall (v, b), _, _ -> 
+  | Forall (v, b), _, _ ->
       if v <> oldv then Forall (v, subs b oldv newe)
       else form
         (* match newe with
-        | Boolean (BVar vb) -> Forall (BoolVar vb, subs b oldv newe)
-        | Boolean (ABVar (UnApp vb)) -> Forall (ABoolVar vb, subs b oldv newe)
-        | Term (TVar vt) -> Forall (TermVar vt, subs b oldv newe)
-        | Term (ATVar (UnApp vt)) -> Forall (ATermVar vt, subs b oldv newe)
-        | _ -> raise Subs_Exp_In_Quant) *)
-  | Exists (v, b), _, _ -> 
+           | Boolean (BVar vb) -> Forall (BoolVar vb, subs b oldv newe)
+           | Boolean (ABVar (UnApp vb)) -> Forall (ABoolVar vb, subs b oldv newe)
+           | Term (TVar vt) -> Forall (TermVar vt, subs b oldv newe)
+           | Term (ATVar (UnApp vt)) -> Forall (ATermVar vt, subs b oldv newe)
+           | _ -> raise Subs_Exp_In_Quant) *)
+  | Exists (v, b), _, _ ->
       if v <> oldv then Exists (v, subs b oldv newe)
       else form
         (* match newe with
-        | Boolean (BVar vb) -> Exists (BoolVar vb, subs b oldv newe)
-        | Boolean (ABVar (UnApp vb)) -> Exists (ABoolVar vb, subs b oldv newe)
-        | Term (TVar vt) -> Exists (TermVar vt, subs b oldv newe)
-        | Term (ATVar (UnApp vt)) -> Exists (ATermVar vt, subs b oldv newe)
-        | _ -> raise Subs_Exp_In_Quant) *)
+           | Boolean (BVar vb) -> Exists (BoolVar vb, subs b oldv newe)
+           | Boolean (ABVar (UnApp vb)) -> Exists (ABoolVar vb, subs b oldv newe)
+           | Term (TVar vt) -> Exists (TermVar vt, subs b oldv newe)
+           | Term (ATVar (UnApp vt)) -> Exists (ATermVar vt, subs b oldv newe)
+           | _ -> raise Subs_Exp_In_Quant) *)
   | Hole (s, arg_list), _, _ ->
       Hole
         ( s,
