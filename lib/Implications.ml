@@ -614,3 +614,140 @@ module NoHoleVectorStateImplicatorVampire () : ImplicationHandler = struct
   let implies = no_hole_vector_state_implicator_vampire ()
   let hole_values = lazy []
 end
+
+let indexer var_name index = Printf.sprintf "%s_finitevscpy_%d" var_name index
+
+let rec term_fininte_vs_transformer term =
+  match term with
+  | ATVar (App (ET, Int i)) -> TVar (T (indexer "e_t" i))
+  | ATVar (App (T v, Int i)) -> TVar (T (indexer v i))
+  | Minus t -> Minus (term_fininte_vs_transformer t)
+  | Plus (t1, t2) ->
+      Plus (term_fininte_vs_transformer t1, term_fininte_vs_transformer t2)
+  | _ -> term
+
+let rec bool_finite_vs_transformer max_ind form =
+  match form with
+  | ABVar (App (BT, Int i)) -> BVar (B (indexer "b_t" i))
+  | ABVar (App (B v, Int i)) -> BVar (B (indexer v i))
+  | And (f1, f2) ->
+      And
+        ( bool_finite_vs_transformer max_ind f1,
+          bool_finite_vs_transformer max_ind f2 )
+  | Or (f1, f2) ->
+      Or
+        ( bool_finite_vs_transformer max_ind f1,
+          bool_finite_vs_transformer max_ind f2 )
+  | Not f -> Not (bool_finite_vs_transformer max_ind f)
+  | Implies (f1, f2) ->
+      Implies
+        ( bool_finite_vs_transformer max_ind f1,
+          bool_finite_vs_transformer max_ind f2 )
+  | Equals (t1, t2) ->
+      Equals (term_fininte_vs_transformer t1, term_fininte_vs_transformer t2)
+  | Less (t1, t2) ->
+      Less (term_fininte_vs_transformer t1, term_fininte_vs_transformer t2)
+  | Iff (f1, f2) ->
+      Iff
+        ( bool_finite_vs_transformer max_ind f1,
+          bool_finite_vs_transformer max_ind f2 )
+  | Exists (v, f) -> 
+    (match v with
+    | TermVar _ -> Exists (v, bool_finite_vs_transformer max_ind f)
+    | BoolVar _ -> Exists (v, bool_finite_vs_transformer max_ind f)
+    | ATermVar (T t) -> List.fold_left (fun form i -> Exists (TermVar (T (indexer t i)), form)) (bool_finite_vs_transformer max_ind f) (List.init max_ind (fun n -> n + 1))
+    | ABoolVar (B b) -> List.fold_left (fun form i -> Exists (BoolVar (B (indexer b i)), form)) (bool_finite_vs_transformer max_ind f) (List.init max_ind (fun n -> n + 1))
+    | _ -> raise Unsupported_Formula_Constructor)
+  | Forall (v, f) ->
+    (match v with
+    | TermVar _ -> Forall (v, bool_finite_vs_transformer max_ind f)
+    | BoolVar _ -> Forall (v, bool_finite_vs_transformer max_ind f)
+    | ATermVar (T t) -> List.fold_left (fun form i -> Forall (TermVar (T (indexer t i)), form)) (bool_finite_vs_transformer max_ind f) (List.init max_ind (fun n -> n + 1))
+    | ABoolVar (B b) -> List.fold_left (fun form i -> Forall (BoolVar (B (indexer b i)), form)) (bool_finite_vs_transformer max_ind f) (List.init max_ind (fun n -> n + 1))
+    | _ -> raise Unsupported_Formula_Constructor)
+  | Hole (h, arg_list) ->
+      let big_args_list =
+        List.concat
+          (List.init max_ind (fun n ->
+               List.map
+                 (fun exp ->
+                   exp_finite_vs_transformer max_ind
+                     (set_exp_index exp (Int (n + 1))))
+                 arg_list))
+      in
+      Hole (h, big_args_list)
+  | T (f, b_loop, t_map) ->
+      (* A list of (positive variables, formulas) for all 2^n combinations of bt[i] for the indices i appearing in t. If no indices appear, then it's just True.
+         E.g., [([1, 2], bloop[1] && bloop[2]], ([1], bloop[1] && !bloop[2]), ([2], !bloop[1] && bloop[2]), ([], !bloop[1] && !bloop[2])] *)
+      let t_guards =
+        List.fold_left
+          (fun partial_perms_list index ->
+            List.append
+              (List.map
+                 (fun (pos_list, conj) ->
+                   (pos_list, And (Not (ABVar (App (b_loop, Int index))), conj)))
+                 partial_perms_list)
+              (List.map
+                 (fun (pos_list, conj) ->
+                   ( List.cons index pos_list,
+                     And (ABVar (App (b_loop, Int index)), conj) ))
+                 partial_perms_list))
+          [ ([], True) ]
+          (List.init max_ind (fun n -> n + 1))
+      in
+      let expanded_hole = bool_finite_vs_transformer max_ind f in
+      let implied_subbed_holes =
+        List.map
+          (fun (off_inds, prec) ->
+            Implies
+              ( bool_finite_vs_transformer max_ind prec,
+                List.fold_left
+                  (fun hole ind ->
+                    List.fold_left
+                      (fun hole (oldv, newv) ->
+                        subs hole
+                          (TermVar (T (indexer (var_tostr (ATermVar oldv)) ind)))
+                          (Term
+                             (TVar (T (indexer (var_tostr (ATermVar newv)) ind)))))
+                      hole (VMap_AT.bindings t_map))
+                  expanded_hole off_inds ))
+          t_guards
+      in
+      let conjoined_holes =
+        List.fold_left
+          (fun form hole -> And (form, hole))
+          True implied_subbed_holes
+      in
+      (* In the finite case, we don't reason about infinite vectors so we can expand explicitly.
+         We perform an across-the-board conversion of holes over vector states to holes over the entries.
+         This is a bit of a hack to use all the infinite vs machinery and change it at the very end, but let's not worry about that. *)
+      conjoined_holes
+  | TPrime f -> TPrime (bool_finite_vs_transformer max_ind f)
+  | _ -> form
+
+and exp_finite_vs_transformer max_ind exp =
+  match exp with
+  | Term t -> Term (term_fininte_vs_transformer t)
+  | Boolean b -> Boolean (bool_finite_vs_transformer max_ind b)
+
+let finite_holeless_implicator max_ind =
+  (module struct
+    let implies pre post =
+      no_hole_simple_implicator_z3 ()
+        (bool_finite_vs_transformer max_ind pre)
+        (bool_finite_vs_transformer max_ind post)
+
+    let hole_values = lazy []
+  end : ImplicationHandler)
+
+let finite_holes_implicator max_ind =
+  (module struct
+    let implies, hole_values =
+      match implicator_hole_synth_cvc5 () with
+      | imp, hv ->
+          ( (fun pre post ->
+              imp
+                (bool_finite_vs_transformer max_ind pre)
+                (bool_finite_vs_transformer max_ind post)),
+            hv )
+  end : ImplicationHandler)

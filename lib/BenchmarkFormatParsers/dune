@@ -1,0 +1,9 @@
+(menhir
+ (modules nopeparser))
+
+(ocamllex nopelexer)
+
+(executable
+ (public_name Nope2ULSynth)
+ (name main)
+ (libraries ULSynth Logic Programs Proofrules))

@@ -47,6 +47,9 @@ type formula = boolean_exp
 
 val form_tostr : formula -> string
 
+(* Produces less readable but more pareseable output. *)
+val form_to_parseable_str : formula -> string
+
 (* Produces forall var. form if var appears in form. Else returns form. *)
 val forall : variable -> formula -> formula
 
@@ -64,8 +67,14 @@ val fresh_var_name : formula -> string list -> string
 (* Given a formula and a map of holes to bodies, substitutes all holes in the original formula with the correct bodies.*)
 val sub_holes : formula -> ((string * variable list) * formula) list -> formula
 
+(* For all array vars which are indexed by a hole (UnApp's), set the index to the given exp. *)
+val set_exp_index : exp -> term -> exp
+
 val t_transform :
   formula ->
   bool_array_var (*-> bool_array_var VMap_AB.t*) ->
   term_array_var VMap_AT.t ->
   formula
+
+(* Returns the maximum value of the indices appearing in the expression, assuming they are all ints, or 0 if none appear.   *)
+val max_index : exp -> int

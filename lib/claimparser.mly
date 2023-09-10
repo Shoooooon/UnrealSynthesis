@@ -2,7 +2,6 @@
     open Logic.Formula
     open Logic.Variable
     open Programs.Program
-    exception Parse_Bad_Prog_Int
     exception Parse_Bad_Formula
     let make_exists body quant = Formula.Exists (quant, body)
     let make_forall body quant = Formula.Forall (quant, body)
@@ -51,7 +50,7 @@
 %token RIGHT_SQUARE
 %token LEFT_FORM_DEMARCATOR
 %token RIGHT_FORM_DEMARCATOR
-%start <ProofRule.triple> ultriple
+%start <Proofrules.ProofRule.triple> ultriple
 %%
 
 // Parse UL triples.
@@ -72,7 +71,7 @@ ultriple:
         | Stmt (SNTerm s) -> Some {Programs.NonTerminal.name=s.name; expansions=lazy (List.map (subs_nonterms_stmt grammar) (Lazy.force s.expansions)); strongest=s.strongest}
         | _ -> None)) (nt_list grammar))
       } in 
-      {ProofRule.pre = pren; prog = (progn grammar); post = postn}      
+      {Proofrules.ProofRule.pre = pren; prog = (progn grammar); post = postn}      
       }
 
 // Utilities for parsing formulas -- Roughly matches smt2 format except = is only for ints, and <-> is boolean equality
@@ -126,12 +125,12 @@ formula:
 // Utilities for program parsing 
 // Note, all returns will be functions that take in a lazy grammar. This prevents different parses from interfering with one another. 
 prog_num: 
-  | i = INT {fun _ -> if i = 0 then Zero else if i = 1 then One else raise Parse_Bad_Prog_Int}
+  | i = INT {fun _ -> Int i}
   | LEFT_PAREN PLUS n1=prog_num n2=prog_num RIGHT_PAREN {fun gram -> Plus ((n1 gram), (n2 gram))}
   | LEFT_PAREN IF b=prog_bool THEN n1=prog_num ELSE n2=prog_num RIGHT_PAREN {fun gram -> ITE ((b gram), (n1 gram), (n2 gram))}
   | NT_KWD s = STRING {fun gram -> (if (List.exists (fun n -> (Programs.NonTerminal.name n)= s) (Lazy.force gram).grammar_num)
     then (NNTerm (List.find (fun n -> (Programs.NonTerminal.name n) = s) (Lazy.force gram).grammar_num)) 
-    else (NNTerm ({name=s; expansions=lazy []; strongest=None})))
+    else (NNTerm ({name=s; expansions=lazy []; strongest=lazy None})))
     }
   | s = STRING {fun _ -> Var s}
 
@@ -145,7 +144,7 @@ prog_bool:
  | LEFT_PAREN LESS n1=prog_num n2=prog_num RIGHT_PAREN {fun gram -> Less ((n1 gram), (n2 gram))}
  | NT_KWD s = STRING {fun gram -> (if (List.exists (fun b -> (Programs.NonTerminal.name b) = s) (Lazy.force gram).grammar_bool)
     then BNTerm (List.find (fun b -> (Programs.NonTerminal.name b) = s) (Lazy.force gram).grammar_bool)
-    else BNTerm ({name=s; expansions=lazy []; strongest=None}))
+    else BNTerm ({name=s; expansions=lazy []; strongest=lazy None}))
     }
 
 prog_stmt:
@@ -155,7 +154,7 @@ prog_stmt:
   | LEFT_PAREN WHILE b=prog_bool LEFT_FORM_DEMARCATOR f=formula RIGHT_FORM_DEMARCATOR s=prog_stmt RIGHT_PAREN {fun gram -> While ((b gram), f, (s gram))}
   | NT_KWD s = STRING {fun gram -> (if (List.exists (fun st -> (Programs.NonTerminal.name st) = s) (Lazy.force gram).grammar_stmt)
     then SNTerm (List.find (fun st -> (Programs.NonTerminal.name st) = s) (Lazy.force gram).grammar_stmt)
-    else SNTerm ({name=s; expansions=lazy []; strongest=None}))
+    else SNTerm ({name=s; expansions=lazy []; strongest=lazy None}))
     }
 
 program:
@@ -173,9 +172,9 @@ nonterminal_defs:
   | n=nonterminal_def SEMICOLON n_list=nonterminal_defs {fun gram -> List.cons (n gram) (n_list gram)}
 
 nonterminal_def:
-  | INT_KWD name=STRING COLON expansions=prog_num_list COLON str=strongest {fun gram -> Numeric (NNTerm { name = name; expansions = lazy (expansions gram); strongest = str;})}
-  | BOOL_KWD name=STRING COLON expansions=prog_bool_list COLON str=strongest {fun gram -> Boolean (BNTerm { name = name; expansions = lazy (expansions gram); strongest = str;})}
-  | STMT_KWD name=STRING COLON expansions=prog_stmt_list COLON str=strongest {fun gram -> Stmt (SNTerm { name = name; expansions = lazy (expansions gram); strongest = str;})}
+  | INT_KWD name=STRING COLON expansions=prog_num_list COLON str=strongest {fun gram -> Numeric (NNTerm { name = name; expansions = lazy (expansions gram); strongest = lazy str;})}
+  | BOOL_KWD name=STRING COLON expansions=prog_bool_list COLON str=strongest {fun gram -> Boolean (BNTerm { name = name; expansions = lazy (expansions gram); strongest = lazy str;})}
+  | STMT_KWD name=STRING COLON expansions=prog_stmt_list COLON str=strongest {fun gram -> Stmt (SNTerm { name = name; expansions = lazy (expansions gram); strongest = lazy str;})}
 
 prog_bool_list:
   | LEFT_SQUARE RIGHT_SQUARE {fun _ -> []}
@@ -220,7 +219,7 @@ var_pair:
     | (ATermVar _, ATermVar _) -> (v1, v2)
     | (BoolVar _, BoolVar _) -> (v1, v2)
     | (ABoolVar _, ABoolVar _) -> (v1, v2)
-    | _ -> raise Parse_Bad_Prog_Int}
+    | _ -> raise Parse_Bad_Formula}
 
 var:
   | INT_KWD s=STRING {TermVar (T s)}
@@ -230,7 +229,7 @@ var:
   | BOOL_KWD s=STRING {BoolVar (B s)}
   | BOOL_KWD BT {BoolVar BT}
   | ARRAY_BOOL_KWD s1=STRING {ABoolVar (B s1)}
-  | ARRAY_BOOL_KWD BT {ABoolVar (BT)}
+  | ARRAY_BOOL_KWD BT {ABoolVar BT}
   
 formula_or_hole:
   | LEFT_PAREN HOLE_KWD COLON s=STRING vl=vars_list RIGHT_PAREN {Hole (s, vl)}

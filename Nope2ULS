@@ -1,0 +1,38 @@
+while getopts 'cr' flag;
+do
+    case "${flag}" in
+        c) convert=1;;
+        r) run=1;;
+    esac
+done
+if [ $convert ]; then
+	for dir in benchmarks/nope_benchmarks/CLIA_Track_IF/*/
+	do
+		echo $dir
+		for file in ${dir}example*.txt
+		do
+			echo $file
+			dune exec --no-build -- Nope2ULSynth -ex="$file" -grm="${dir}grammar.sl" -o=${file}.uls
+		done
+	done
+fi
+
+if [ $run ]; then
+	echo "START" > results.txt
+	for dir in benchmarks/nope_benchmarks/CLIA_Track_IF/*/
+        do
+                echo $dir
+                for file in ${dir}example*.txt
+                do
+                        # rm -f Synthesis*.sy Synthesis*.out
+                        echo $file >> results.txt
+                        echo $(wc -l < $file)
+                        if [ $(wc -l < $file) > 2 ]; then
+                        timeout 120 dune exec --no-build -- ULSynth -vectors=finite -holes -concise ${file}.uls >> results.txt
+                        else
+                        timeout 120 dune exec --no-build -- ULSynth -holes -concise ${file}.uls >> results.txt
+                        fi
+                done
+        done
+fi
+

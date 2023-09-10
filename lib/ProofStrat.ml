@@ -2,24 +2,27 @@ open Logic.Formula
 open Logic.Variable
 open Programs.Program
 open Programs.NonTerminal
-open ProofRule
+open Proofrules.ProofRule
 
 exception Bad_Strongest_Triple of string * string
 exception Unsupported_Var
 exception Unsupported_Mode
 
 type synthMode = HOLE_SYNTH | INVS_SPECIFIED
-type formMode = SIMPLE | VECTOR_STATE
+type formMode = SIMPLE | FINITE_VECTOR_STATE | VECTOR_STATE
 
 (* Handles building proofs for the 3 types of non-terminals polymorphically.
-   Reassigned_var_finder finds the reassigned vars from a given program; taking this as input lets us support simple and vector-state behaviors.*)
-let nonterm_handler_template reassigned_var_finder to_prog nterm ctrip
+   Reassigned_var_finder finds the reassigned vars from a given program; taking this as input lets us support simple and vector-state behaviors.
+   If finite_vectors=0, vectors are treated as inifinte. Otherwise, they are treated as having length finite_vectors.*)
+
+let nonterm_handler_template expansion_to_prog nterm_to_prog (vector_state : bool) nterm ctrip
+    (finite_vectors : int)
     (build_wpc_proof :
       contextualized_triple_no_pre ->
       (formula -> formula -> bool Lazy.t) ->
       ruleApp) implies =
   let trip = ctrip.trip in
-  match nterm.strongest with
+  match strongest nterm with
   | None ->
       (* If non-recursive, apply GrmDisj *)
       (* Build a list of hypotheses *)
@@ -30,7 +33,8 @@ let nonterm_handler_template reassigned_var_finder to_prog nterm ctrip
               (build_wpc_proof
                  {
                    context = ctrip.context;
-                   trip = { prog = to_prog expansion; post = trip.post };
+                   trip =
+                     { prog = expansion_to_prog expansion; post = trip.post };
                  }
                  implies)
               pflist)
@@ -59,24 +63,24 @@ let nonterm_handler_template reassigned_var_finder to_prog nterm ctrip
   | Some (var_pairs_list, postc) ->
       (* First, make sure the proposed x covers all program variables whose values can change in the body.
           TODO: Move this check to intake of non-terminal at some point. *)
-      VS.iter
-        (fun var ->
-          if
-            List.mem (var_tostr var)
-              (List.map (fun (a, _) -> var_tostr a) var_pairs_list)
-          then ()
-          else
-            raise
-              (Bad_Strongest_Triple
-                 ( prog_tostr trip.prog,
-                   Printf.sprintf "[%s]"
-                     (String.concat "; "
-                        (List.map
-                           (fun (a, b) ->
-                             Printf.sprintf "(%s, %s)" (var_tostr a)
-                               (var_tostr b))
-                           var_pairs_list)) )))
-        (reassigned_var_finder trip.prog);
+      (* VS.iter
+         (fun var ->
+           if
+             List.mem (var_tostr var)
+               (List.map (fun (a, _) -> var_tostr a) var_pairs_list)
+           then ()
+           else
+             raise
+               (Bad_Strongest_Triple
+                  ( prog_tostr trip.prog,
+                    Printf.sprintf "[%s]"
+                      (String.concat "; "
+                         (List.map
+                            (fun (a, b) ->
+                              Printf.sprintf "(%s, %s)" (var_tostr a)
+                                (var_tostr b))
+                            var_pairs_list)) )))
+         (reassigned_var_finder trip.prog); *)
       (*Write x=z. *)
       let ghost_pre =
         List.fold_left
@@ -89,25 +93,63 @@ let nonterm_handler_template reassigned_var_finder to_prog nterm ctrip
             | ABoolVar p, ABoolVar g ->
                 Logic.Formula.And
                   ( form,
-                    Forall
-                      ( TermVar (T "i"),
-                        Iff
-                          ( ABVar (App (p, TVar (T "i"))),
-                            ABVar (App (g, TVar (T "i"))) ) ) )
+                    if finite_vectors != 0 then
+                      List.fold_left
+                        (fun form index ->
+                          Logic.Formula.And
+                            ( form,
+                              Iff
+                                ( ABVar (App (p, Int index)),
+                                  ABVar (App (g, Int index)) ) ))
+                        True
+                        (List.init finite_vectors (fun x -> x + 1))
+                    else
+                      Forall
+                        ( TermVar (T "i"),
+                          Iff
+                            ( ABVar (App (p, TVar (T "i"))),
+                              ABVar (App (g, TVar (T "i"))) ) ) )
             | ATermVar p, ATermVar g ->
                 Logic.Formula.And
                   ( form,
-                    Forall
-                      ( TermVar (T "i"),
-                        Equals
-                          ( ATVar (App (p, TVar (T "i"))),
-                            ATVar (App (g, TVar (T "i"))) ) ) )
+                    if finite_vectors != 0 then
+                      List.fold_left
+                        (fun form index ->
+                          Logic.Formula.And
+                            ( form,
+                              Equals
+                                ( ATVar (App (p, Int index)),
+                                  ATVar (App (g, Int index)) ) ))
+                        True
+                        (List.init finite_vectors (fun x -> x + 1))
+                    else
+                      Forall
+                        ( TermVar (T "i"),
+                          Equals
+                            ( ATVar (App (p, TVar (T "i"))),
+                              ATVar (App (g, TVar (T "i"))) ) ) )
             | _ -> raise (Bad_Strongest_Triple (prog_tostr trip.prog, "")))
           True var_pairs_list
       in
       (* Write the adapt precondition \forall y. Q_0[y/x][x/z] \rightarrow Q[y/x] *)
       (* Q_0[y/x] *)
       (* Generation of y is also dependent on Q to avoid capture *)
+      (* This first step handles e_t and b_t which may not appear in var_pairs_list.
+         Admittedly, it is messy. *)
+      let var_pairs_list =
+        List.append var_pairs_list
+          (List.map
+             (fun x -> match x with
+             | TermVar y -> if (not vector_state) then (x, TermVar (T "unusedconstantvarthatshouldbereplacedbysomtehingrobustwhenpossible")) else
+              ((match y with | ET -> (ATermVar ET) | T v -> (ATermVar (T v))), ATermVar (T "unusedconstantvarthatshouldbereplacedbysomtehingrobustwhenpossible"))
+             | BoolVar y -> if (not vector_state) then (x, BoolVar (B "unusedconstantvarthatshouldbereplacedbysomtehingrobustwhenpossible")) else
+              ((match y with | BT -> (ABoolVar BT) | B v -> (ABoolVar (B v))), ABoolVar (B "unusedconstantvarthatshouldbereplacedbysomtehingrobustwhenpossible"))
+             | _ -> raise Unsupported_Var)
+             (List.filter
+                (fun var ->
+                  List.for_all (fun (a, _) -> a <> var) var_pairs_list)
+                (VS.elements (reassigned_vars_clean (nterm_to_prog nterm)))))
+      in      
       let adapted_pre_1, xyz_list =
         List.fold_left
           (fun (form, xyz_list) (prog_var, ghost_var) ->
@@ -127,10 +169,12 @@ let nonterm_handler_template reassigned_var_finder to_prog nterm ctrip
                 ( subs form prog_var (Boolean (ABVar (UnApp (B y)))),
                   List.cons (prog_var, ABoolVar (B y), ghost_var) xyz_list )
             | ATermVar _ ->
-                ( subs form prog_var (Term (ATVar (UnApp (T y)))),
+              ( subs form prog_var (Term (ATVar (UnApp (T y)))),
                   List.cons (prog_var, ATermVar (T y), ghost_var) xyz_list ))
           (postc, []) var_pairs_list
       in
+      (* List.iter (fun (x,y,z) -> print_endline (Printf.sprintf "%s - %s - %s" (var_tostr x) (var_tostr y) (var_tostr z))) xyz_list;
+      print_endline (form_tostr adapted_pre_1); *)
       (* Q_0[y/x][x/z] *)
       let adapted_pre_2 =
         List.fold_left
@@ -157,7 +201,6 @@ let nonterm_handler_template reassigned_var_finder to_prog nterm ctrip
       in
       (* \forall y. Q_0[y/x][x/z] \rightarrow Q[y/x] *)
       let adapted_pre =
-        (* adapted_pre_3 *)
         List.fold_left
           (fun form (_, y, _) -> forall y form)
           adapted_pre_3 xyz_list
@@ -188,7 +231,7 @@ let nonterm_handler_template reassigned_var_finder to_prog nterm ctrip
                 build_wpc_proof
                   {
                     context = bigger_context;
-                    trip = { prog = to_prog expansion; post = postc };
+                    trip = { prog = expansion_to_prog expansion; post = postc };
                   }
                   implies)
               (Programs.NonTerminal.expand nterm)
@@ -228,17 +271,24 @@ let nonterm_handler_template reassigned_var_finder to_prog nterm ctrip
           the_proof_before_adapt )
 
 let nonterm_handler_simple_numeric =
-  nonterm_handler_template reassigned_vars (fun expression ->
-      Numeric expression)
+  nonterm_handler_template
+    (fun expression -> Numeric expression)
+    (fun nt -> Numeric (NNTerm nt))
+    false
 
 let nonterm_handler_simple_boolean =
-  nonterm_handler_template reassigned_vars (fun expression ->
-      Boolean expression)
+  nonterm_handler_template
+    (fun expression -> Boolean expression)
+    (fun nt -> Boolean (BNTerm nt))
+    false
 
 let nonterm_handler_simple_stmt =
-  nonterm_handler_template reassigned_vars (fun expression -> Stmt expression)
+  nonterm_handler_template
+    (fun expression -> Stmt expression)
+    (fun nt -> Stmt (SNTerm nt))
+    false
 
-let simple_to_vector_state var_set =
+(* let simple_to_vector_state var_set =
   VS.map
     (fun var ->
       match var with
@@ -247,22 +297,25 @@ let simple_to_vector_state var_set =
       | BoolVar BT -> ABoolVar BT
       | BoolVar (B x) -> ABoolVar (B x)
       | _ -> raise Unsupported_Var)
-    var_set
+    var_set *)
 
 let nonterm_handler_vector_state_numeric =
   nonterm_handler_template
-    (fun prog -> simple_to_vector_state (reassigned_vars prog))
     (fun expression -> Numeric expression)
+    (fun nt -> Numeric (NNTerm nt))
+    true
 
 let nonterm_handler_vector_state_boolean =
   nonterm_handler_template
-    (fun prog -> simple_to_vector_state (reassigned_vars prog))
     (fun expression -> Boolean expression)
+    (fun nt -> Boolean (BNTerm nt))
+    true
 
 let nonterm_handler_vector_state_stmt =
   nonterm_handler_template
-    (fun prog -> simple_to_vector_state (reassigned_vars prog))
     (fun expression -> Stmt expression)
+    (fun nt -> Stmt (SNTerm nt))
+    true
 
 (* Various proof substrategies for different prog constructors: *)
 (* Trace Variants give the strategies for constructing different types of variable-related objects.
@@ -303,39 +356,22 @@ let vector_state_tv =
     strvar_to_bool_form = (fun v -> ABVar (UnApp (B v)));
   }
 
-(* ZERO *)
-let zero_template tv (ctrip : contextualized_triple_no_pre) =
+(* INT *)
+let int_template tv i (ctrip : contextualized_triple_no_pre) =
   let trip = ctrip.trip in
-  Zero
+  Int
     {
       context = ctrip.context;
       trip =
         {
-          pre = subs trip.post tv.et_var (Term (Int 0));
+          pre = subs trip.post tv.et_var (Term (Int i));
           prog = trip.prog;
           post = trip.post;
         };
     }
 
-let zero_simple = zero_template simple_tv
-let zero_vector_state = zero_template vector_state_tv
-
-(* ONE *)
-let one_template tv (ctrip : contextualized_triple_no_pre) =
-  let trip = ctrip.trip in
-  One
-    {
-      context = ctrip.context;
-      trip =
-        {
-          pre = subs trip.post tv.et_var (Term (Int 1));
-          prog = trip.prog;
-          post = trip.post;
-        };
-    }
-
-let one_simple = one_template simple_tv
-let one_vector_state = one_template vector_state_tv
+let int_simple = int_template simple_tv
+let int_vector_state = int_template vector_state_tv
 
 (* VAR *)
 let var_template tv x (ctrip : contextualized_triple_no_pre) =
@@ -1102,14 +1138,13 @@ let while_simple b inv s (ctrip : contextualized_triple_no_pre) build_pf implies
 let rec build_wpc_proof (ctrip : contextualized_triple_no_pre)
     (implies : formula -> formula -> bool Lazy.t) =
   match ctrip.trip.prog with
-  | Numeric Zero -> zero_simple ctrip
-  | Numeric One -> one_simple ctrip
+  | Numeric (Int i) -> int_simple i ctrip
   | Numeric (Var x) -> var_simple x ctrip
   | Numeric (Plus (t1, t2)) -> plus_simple t1 t2 ctrip build_wpc_proof implies
   | Numeric (ITE (b, n1, n2)) ->
       ite_simple_numeric b n1 n2 ctrip build_wpc_proof implies
   | Numeric (NNTerm nterm) ->
-      nonterm_handler_simple_numeric nterm ctrip build_wpc_proof implies
+      nonterm_handler_simple_numeric nterm ctrip 0 build_wpc_proof implies
   | Boolean True -> true_simple ctrip
   | Boolean False -> false_simple ctrip
   | Boolean (Not b) -> not_simple b ctrip build_wpc_proof implies
@@ -1119,7 +1154,7 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre)
       equals_simple n1 n2 ctrip build_wpc_proof implies
   | Boolean (Less (n1, n2)) -> less_simple n1 n2 ctrip build_wpc_proof implies
   | Boolean (BNTerm nterm) ->
-      nonterm_handler_simple_boolean nterm ctrip build_wpc_proof implies
+      nonterm_handler_simple_boolean nterm ctrip 0 build_wpc_proof implies
   | Stmt (Assign (v, n)) -> assign_simple v n ctrip build_wpc_proof implies
   | Stmt (Seq (s1, s2)) -> seq_simple s1 s2 ctrip build_wpc_proof implies
   | Stmt (ITE (b, s1, s2)) ->
@@ -1127,14 +1162,76 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre)
   | Stmt (While (b, inv, s)) ->
       while_simple b inv s ctrip build_wpc_proof implies
   | Stmt (SNTerm nterm) ->
-      nonterm_handler_simple_stmt nterm ctrip build_wpc_proof implies
+      nonterm_handler_simple_stmt nterm ctrip 0 build_wpc_proof implies
+
+let rec build_wpc_proof_finite_vector_state (length : int)
+    (ctrip : contextualized_triple_no_pre)
+    (implies : formula -> formula -> bool Lazy.t) =
+  let trip = ctrip.trip in
+  match trip.prog with
+  | Numeric (Int i) -> int_vector_state i ctrip
+  | Numeric (Var x) -> var_vector_state x ctrip
+  | Numeric (Plus (t1, t2)) ->
+      plus_vector_state t1 t2 ctrip
+        (build_wpc_proof_finite_vector_state length)
+        implies
+  | Numeric (ITE (b, s1, s2)) ->
+      ite_vector_state_numeric b s1 s2 ctrip
+        (build_wpc_proof_finite_vector_state length)
+        implies
+  | Numeric (NNTerm nterm) ->
+      nonterm_handler_vector_state_numeric nterm ctrip length
+        (build_wpc_proof_finite_vector_state length)
+        implies
+  | Boolean (Equals (n1, n2)) ->
+      equals_vector_state n1 n2 ctrip
+        (build_wpc_proof_finite_vector_state length)
+        implies
+  | Boolean (Less (n1, n2)) ->
+      less_vector_state n1 n2 ctrip
+        (build_wpc_proof_finite_vector_state length)
+        implies
+  | Boolean True -> true_vector_state ctrip
+  | Boolean False -> false_vector_state ctrip
+  | Boolean (Not b) ->
+      not_vector_state b ctrip
+        (build_wpc_proof_finite_vector_state length)
+        implies
+  | Boolean (And (b1, b2)) ->
+      and_vector_state b1 b2 ctrip
+        (build_wpc_proof_finite_vector_state length)
+        implies
+  | Boolean (Or (b1, b2)) ->
+      or_vector_state b1 b2 ctrip
+        (build_wpc_proof_finite_vector_state length)
+        implies
+  | Boolean (BNTerm nterm) ->
+      nonterm_handler_vector_state_boolean nterm ctrip length
+        (build_wpc_proof_finite_vector_state length)
+        implies
+  | Stmt (Assign (v, n)) ->
+      assign_vector_state v n ctrip
+        (build_wpc_proof_finite_vector_state length)
+        implies
+  | Stmt (Seq (s1, s2)) ->
+      seq_vecor_state s1 s2 ctrip
+        (build_wpc_proof_finite_vector_state length)
+        implies
+  | Stmt (ITE (b, s1, s2)) ->
+      ite_vector_state_stmt b s1 s2 ctrip
+        (build_wpc_proof_finite_vector_state length)
+        implies
+  | Stmt (SNTerm nterm) ->
+      nonterm_handler_vector_state_stmt nterm ctrip length
+        (build_wpc_proof_finite_vector_state length)
+        implies
+  | _ -> raise Unsupported_Var
 
 let rec build_wpc_proof_vector_state (ctrip : contextualized_triple_no_pre)
     (implies : formula -> formula -> bool Lazy.t) =
   let trip = ctrip.trip in
   match trip.prog with
-  | Numeric Zero -> zero_vector_state ctrip
-  | Numeric One -> one_vector_state ctrip
+  | Numeric (Int i) -> int_vector_state i ctrip
   | Numeric (Var x) -> var_vector_state x ctrip
   | Numeric (Plus (t1, t2)) ->
       plus_vector_state t1 t2 ctrip build_wpc_proof_vector_state implies
@@ -1142,7 +1239,7 @@ let rec build_wpc_proof_vector_state (ctrip : contextualized_triple_no_pre)
       ite_vector_state_numeric b s1 s2 ctrip build_wpc_proof_vector_state
         implies
   | Numeric (NNTerm nterm) ->
-      nonterm_handler_vector_state_numeric nterm ctrip
+      nonterm_handler_vector_state_numeric nterm ctrip 0
         build_wpc_proof_vector_state implies
   | Boolean (Equals (n1, n2)) ->
       equals_vector_state n1 n2 ctrip build_wpc_proof_vector_state implies
@@ -1157,7 +1254,7 @@ let rec build_wpc_proof_vector_state (ctrip : contextualized_triple_no_pre)
   | Boolean (Or (b1, b2)) ->
       or_vector_state b1 b2 ctrip build_wpc_proof_vector_state implies
   | Boolean (BNTerm nterm) ->
-      nonterm_handler_vector_state_boolean nterm ctrip
+      nonterm_handler_vector_state_boolean nterm ctrip 0
         build_wpc_proof_vector_state implies
   | Stmt (Assign (v, n)) ->
       assign_vector_state v n ctrip build_wpc_proof_vector_state implies
@@ -1166,8 +1263,8 @@ let rec build_wpc_proof_vector_state (ctrip : contextualized_triple_no_pre)
   | Stmt (ITE (b, s1, s2)) ->
       ite_vector_state_stmt b s1 s2 ctrip build_wpc_proof_vector_state implies
   | Stmt (SNTerm nterm) ->
-      nonterm_handler_vector_state_stmt nterm ctrip build_wpc_proof_vector_state
-        implies
+      nonterm_handler_vector_state_stmt nterm ctrip 0
+        build_wpc_proof_vector_state implies
   | _ -> raise Unsupported_Var
 
 let prove (trip : triple) (smode : synthMode) (fmode : formMode) =
@@ -1183,12 +1280,22 @@ let prove (trip : triple) (smode : synthMode) (fmode : formMode) =
              (module Implications.NoHoleSimpleImplicatorZ3 ())
          | INVS_SPECIFIED, VECTOR_STATE ->
              (module Implications.NoHoleVectorStateImplicatorVampire ())
+         | INVS_SPECIFIED, FINITE_VECTOR_STATE ->
+             Implications.finite_holeless_implicator
+               (max_index (Boolean (And (trip.pre, trip.post))))
+         | HOLE_SYNTH, FINITE_VECTOR_STATE ->
+             Implications.finite_holes_implicator
+               (max_index (Boolean (And (trip.pre, trip.post))))
          | _ -> raise Unsupported_Mode
         : Implications.ImplicationHandler)
   in
   let build =
     match fmode with
     | SIMPLE -> build_wpc_proof
+    | FINITE_VECTOR_STATE ->
+        (* Check max vector length referenced. *)
+        build_wpc_proof_finite_vector_state
+          (Logic.Formula.max_index (Boolean (And (trip.pre, trip.post))))
     | VECTOR_STATE -> build_wpc_proof_vector_state
   in
   let strongest =

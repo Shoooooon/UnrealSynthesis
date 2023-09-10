@@ -1,0 +1,41 @@
+1.array search:
+	constraint: 	(constraint (=> (< x1 x2) (=> (< k x1) (= (findIdx x1 x2 k) 0))))
+			(constraint (=> (< x1 x2) (=> (> k x2) (= (findIdx x1 x2 k) 2))))
+			(constraint (=> (< x1 x2) (=> (and (> k x1) (< k x2)) (= (findIdx x1 x2 k) 1))))
+	grammar:	CLIA no *
+			Start 	-> NT0 NT1
+			NT0	-> x y k 0 1 (+ NT0 NT0) (- NT0 NT0)
+			NT1	-> (+ NT1 NT0) (- NT0 NT1) (- NT1 NT0) (ite BNT0 NT0 NT0)
+			BNT0	-> (<= NT0 NT0) (not BNT0) (and BNT0 BNT0)
+
+	bound:		#ite < 2
+	proof:		1.	NT0 can be abstracted as a linear function x*c1+y*c2+k*c3+c4. since we have a most 1 ite, if we pick 9 differnt points, there must be 5 of them consistent with the linear 					function. consider points (0,10,{-1,-2,-3,1,2,3,11,12,13}, {0,0,0,1,1,1,2,2,2}) where there is no solution of the linear function for any 5 of them
+
+2.array sum
+	constraint:	(constraint (=> (> (+ x1 x2) 5) (= (findSum x1 x2 ) (+ x1 x2))))
+			(constraint (=> (<= (+ x1 x2) 5) (= (findSum x1 x2 ) 0)))
+	grammar:	CLIA no *
+			Start 	-> NT0 NT1
+			NT0	-> x y 0 1 (+ NT0 NT0) (- NT0 NT0)
+			NT1	-> (+ NT1 NT0) (- NT0 NT1) (- NT1 NT0) (ite BNT0 NT0 NT0)
+			BNT0	-> (<= NT0 NT0) (not BNT0) (and BNT0 BNT0)
+
+	bound:		#ite < 2
+
+3.max2
+	constraint:	(constraint (>= (max2 x y) x))
+			(constraint (>= (max2 x y) y))
+			(constraint (or (= x (max2 x y))
+					(= y (max2 x y))))
+	grammar:	CLIA no *
+			Start 	-> NT0 NT1
+			NT0	-> x y k 0 1 (+ NT0 NT0) (- NT0 NT0)
+
+	bound:		#ite < 1
+	proof:		1.	the grammar can be abstracted as x*k1+y*k2+k3 which is a linear with three free variable. consider three points (3,5,5) (6,5,6) (7,5,7) (8,5,8)
+			2.	guess max2=x we will get counter example (3,5,5). similarly max2 = y is also incorrect. then there is no term in G satisfy (max = x /\ max = y)
+
+4.nested *
+	constraint:	(constraint (= 3 f))
+	grammar:	Start	-> 2 (+ 2 Start) (* 2 N)
+			N 	-> 3 (* 3 Start)

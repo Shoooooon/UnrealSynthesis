@@ -1,0 +1,107 @@
+fg_array_search_2
+(constraint (=> (< x1 x2) (=> (< k x1) (= (findIdx x1 x2 k) 0))))
+(constraint (=> (< x1 x2) (=> (> k x2) (= (findIdx x1 x2 k) 2))))
+(constraint (=> (< x1 x2) (=> (and (> k x1) (< k x2)) (= (findIdx x1 x2 k) 1))))
+
+fg_array_sum_2_5
+(constraint (=> (> (+ x1 x2) 5) (= (findSum x1 x2 ) (+ x1 x2))))
+(constraint (=> (<= (+ x1 x2) 5) (= (findSum x1 x2 ) 0)))
+
+fg_mpg_example1
+(constraint ( iteB  ( >= x 5 ) ( = ( ex x y ) ( plus3 (five-times x ) (three-times y) 17 ) ) ( = (ex x y ) ( plus2 (three-times x) 1 ) ) ) )
+
+fg_mpg_example2
+( constraint (  iteB ( <=  (  plus2 ( two-times x ) ( minus 3 ) )   ( plus3 z  ( minus ( two-times y ) )  4    ) ) (  >=  ( eq1 x y z )  x )  ( <= (eq1 x y z ) x ) ) )
+( constraint (  iteB ( <=  (  plus2 ( two-times x ) ( minus 3 ) )   ( plus3 z  ( minus ( two-times y ) )  4    ) ) (  >=  ( eq1 x y z )  y )  ( <= (eq1 x y z ) y ) ) )
+( constraint (  iteB ( <=  (  plus2 ( two-times x ) ( minus 3 ) )   ( plus3 z  ( minus ( two-times y ) )  4    ) ) (  >=  ( eq1 x y z )  z )  ( <= (eq1 x y z ) z ) ) )
+( constraint (  or3 (  =  ( eq1 x y z )  x ) (  =  ( eq1 x y z )  y ) (  =  ( eq1 x y z )  z ) ) )
+
+fg_mpg_example3
+; ite 3z >= 5
+;  ite 2x <= y
+;    3x - 5y +7z +9
+;    2x -9z +5
+; else 
+; ite 2z <= -y +2x
+;   - 6x + 3y + 4
+;    9x + 9y -z + 5      
+
+fg_mpg_example4
+( constraint (  iteB  (>=  ( plus3 ( two-times x ) z ( minus z1) )   ( minus y )  ) 
+		         ( iteB  (  <=  ( plus2 x z1 )   y ) 
+		  	        (  =  ( eq2 x y z  z1 ) ( plus4  ( ten-times x) ( two-times (ten-times y )) ( three-times ( five-times z) ) -99 ) ) 
+			        (  =  ( eq2 x y z  z1 ) ( plus3  (nine-times y )  (five-times (five-times z1)) -11 ) ) 
+			      )
+             ( iteB (  <=  ( plus3  x  ( three-times z) z1 ) -9 ) 
+			      (  =  ( eq2 x y z z1 )  ( plus5 ( eleven-times x) ( five-times (three-times y ) ) (three-times (ten-times z ) ) (two-times ( eleven-times z1 )) 11 ) ) 
+			      (  =  ( eq2 x y z z1 )  ( plus4  (four-times (four-times x)) ( three-times (six-times z )) (five-times z1) -55 ) ) 
+			   )
+	     ) 
+  )   
+
+fg_mpg_example5
+(constraint (ite ( <= (plus2 x y ) 1 ) 
+                  ( = ( eq1 x y ) ( ten-times ( plus3 x y 1)))
+                  ( ite  (<= (plus2 x y ) 2  )
+                          ( = ( eq1 x y ) ( ten-times ( two-times( plus3 x y -1))))
+                          ( ite  (<= (plus2 x y ) 3  )
+                                 ( = ( eq1 x y ) ( ten-times ( three-times( plus3 x y 1))))
+                                 ( ite  (<= (plus2 x y ) 4  )
+                                        ( = ( eq1 x y ) ( ten-times ( four-times( plus3 x y -1 ))))
+                                        ( ite  (<= (plus2 x y ) 5  )
+                                               ( = ( eq1 x y ) ( ten-times ( five-times( plus3 x y 1))))
+                                               ( = ( eq1 x y ) ( ten-times ( six-times( plus3 x y -1))))
+)   )    )   )   ))
+
+fg_mpg_guard1
+( constraint ( iteB ( >= (plus2 x y) 1 ) 
+                    ( = ( eq1 x y z) ( plus2 x  y    ) )
+		    ( = ( eq1 x y z) ( plus2 x  (minus y)   ) )
+             ))      
+
+
+fg_mpg_guard2
+( constraint ( iteB ( >= (plus3 x y z ) 1 ) 
+                    ( = ( eq1 x y z) ( plus2 x  y    ) )
+		    ( = ( eq1 x y z) ( plus2 x  (minus y)   ) )
+             ))      
+
+
+fg_mpg_guard3
+( constraint ( iteB ( >= (plus4 x x y z ) 1 ) 
+                    ( = ( eq1 x y z) ( plus2 x  y    ) )
+		    ( = ( eq1 x y z) ( plus2 x  (minus y)   ) )
+             ))      
+
+
+fg_mpg_guard4
+( constraint ( iteB ( >= (plus5 x x y y z ) 1 ) 
+                    ( = ( eq1 x y z) ( plus2 x  y    ) )
+		    ( = ( eq1 x y z) ( plus2 x  (minus y)   ) )
+             ))      
+
+fg_mpg_ite1
+( constraint ( iteB ( >= (plus2 x y) 1 ) 
+	            ( iteB ( >= (plus2 x z) 1 )
+                         ( = (eq1 x y z)   ( + x 1 ) ) 
+                         ( = (eq1 x y z )  ( + y 1 ) ) 
+                     ) 
+                     ( = (eq1 x y z)   ( + z 1 ) ) 
+               
+             )
+)      
+
+fg_mpg_ite2
+( constraint ( iteB ( >= (plus2 x y) 1 ) 
+	            ( iteB ( >= (plus2 x z) 1 )
+                         ( = (eq1 x y z)   ( + x 1 ) ) 
+                         ( = (eq1 x y z )  ( + y 1 ) ) 
+                     ) 
+		    ( iteB ( >= (plus2 y z) 1 )
+                         ( = (eq1 x y z)   ( + z 1 ) ) 
+                         ( = (eq1 x y z )  ( + y 1 ) ) 
+                     )
+             )
+)      
+
+

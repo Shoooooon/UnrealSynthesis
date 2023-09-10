@@ -1,4 +1,4 @@
 (executable
  (public_name ULSynth)
  (name main)
- (libraries ULSynth))
+ (libraries ULSynth Proofrules))

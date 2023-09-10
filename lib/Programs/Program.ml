@@ -3,8 +3,7 @@ open Logic.Variable
 
 (* TODO: Expand support for program constants *)
 type numeric_exp =
-  | Zero
-  | One
+  | Int of int
   | Var of string
   | Plus of numeric_exp * numeric_exp
   | ITE of boolean_exp * numeric_exp * numeric_exp
@@ -37,8 +36,7 @@ type program = Numeric of numeric_exp | Boolean of boolean_exp | Stmt of stmt
 
 let rec prog_tostr prog =
   match prog with
-  | Numeric Zero -> "0"
-  | Numeric One -> "1"
+  | Numeric (Int i) -> Printf.sprintf "%d" i
   | Numeric (Var x) -> x
   | Numeric (Plus (n1, n2)) ->
       Printf.sprintf "(%s + %s)" (prog_tostr (Numeric n1))
@@ -78,6 +76,153 @@ let rec prog_tostr prog =
         (prog_tostr (Stmt s))
   | Stmt (SNTerm nterm) -> to_str nterm
 
+(* Prints program in the same form as input is expected. *)
+let rec prog_to_parseable_str prog =
+  match prog with
+  | Numeric (Int i) -> Printf.sprintf "%d" i
+  | Numeric (Var v) -> v
+  | Numeric (Plus (n1, n2)) ->
+      Printf.sprintf "(+ %s %s)"
+        (prog_to_parseable_str (Numeric n1))
+        (prog_to_parseable_str (Numeric n2))
+  | Numeric (ITE (b, n1, n2)) ->
+      Printf.sprintf "(if %s then %s else %s)"
+        (prog_to_parseable_str (Boolean b))
+        (prog_to_parseable_str (Numeric n1))
+        (prog_to_parseable_str (Numeric n2))
+  | Numeric (NNTerm nterm) -> Printf.sprintf "Nonterm %s" nterm.name
+  | Boolean True -> "true"
+  | Boolean False -> "false"
+  | Boolean (Not b) ->
+      Printf.sprintf "(not %s)" (prog_to_parseable_str (Boolean b))
+  | Boolean (And (b1, b2)) ->
+      Printf.sprintf "(and %s %s)"
+        (prog_to_parseable_str (Boolean b1))
+        (prog_to_parseable_str (Boolean b2))
+  | Boolean (Or (b1, b2)) ->
+      Printf.sprintf "(or %s %s)"
+        (prog_to_parseable_str (Boolean b1))
+        (prog_to_parseable_str (Boolean b2))
+  | Boolean (Equals (n1, n2)) ->
+      Printf.sprintf "(= %s %s)"
+        (prog_to_parseable_str (Numeric n1))
+        (prog_to_parseable_str (Numeric n2))
+  | Boolean (Less (n1, n2)) ->
+      Printf.sprintf "(< %s %s)"
+        (prog_to_parseable_str (Numeric n1))
+        (prog_to_parseable_str (Numeric n2))
+  | Boolean (BNTerm nterm) -> Printf.sprintf "Nonterm %s" nterm.name
+  | Stmt (Assign (v, n)) ->
+      Printf.sprintf "(:= %s %s)"
+        (prog_to_parseable_str (Numeric (Var v)))
+        (prog_to_parseable_str (Numeric n))
+  | Stmt (Seq (s1, s2)) ->
+      Printf.sprintf "(; %s %s)"
+        (prog_to_parseable_str (Stmt s1))
+        (prog_to_parseable_str (Stmt s2))
+  | Stmt (ITE (b, s1, s2)) ->
+      Printf.sprintf "(if %s then %s else %s)"
+        (prog_to_parseable_str (Boolean b))
+        (prog_to_parseable_str (Stmt s1))
+        (prog_to_parseable_str (Stmt s2))
+  | Stmt (While (b, inv, s)) ->
+      Printf.sprintf "(while %s do {|%s|} %s)"
+        (prog_to_parseable_str (Boolean b))
+        (Logic.Formula.form_tostr inv)
+        (prog_to_parseable_str (Stmt s))
+  | Stmt (SNTerm nterm) -> Printf.sprintf "Nonterm %s" nterm.name
+
+(* Returns all vars mentioned in the program, including e_t or b_t only if the program is a numeric or bool. *)
+let rec get_program_vars_helper prog examined =
+  match prog with
+  | Numeric (Int _) -> VS.empty
+  | Numeric (Var v) ->
+      VS.singleton (TermVar (match v with "e_t" -> ET | _ -> T v))
+  | Numeric (Plus (n1, n2)) ->
+      VS.union
+        (get_program_vars_helper (Numeric n1) examined)
+        (get_program_vars_helper (Numeric n2) examined)
+  | Numeric (ITE (b, n1, n2)) ->
+      VS.union
+        (get_program_vars_helper (Boolean b) examined)
+        (VS.union
+           (get_program_vars_helper (Numeric n1) examined)
+           (get_program_vars_helper (Numeric n2) examined))
+  | Numeric (NNTerm nterm) ->
+      if List.mem prog examined then VS.empty
+      else
+        List.fold_left
+          (fun a b -> VS.union a b)
+          VS.empty
+          (List.map
+             (fun expansion ->
+               get_program_vars_helper (Numeric expansion)
+                 (List.cons prog examined))
+             (NonTerminal.expand nterm))
+  | Boolean True -> VS.empty
+  | Boolean False -> VS.empty
+  | Boolean (Not b) -> get_program_vars_helper (Boolean b) examined
+  | Boolean (And (b1, b2)) ->
+      VS.union
+        (get_program_vars_helper (Boolean b1) examined)
+        (get_program_vars_helper (Boolean b2) examined)
+  | Boolean (Or (b1, b2)) ->
+      VS.union
+        (get_program_vars_helper (Boolean b1) examined)
+        (get_program_vars_helper (Boolean b2) examined)
+  | Boolean (Equals (n1, n2)) ->
+      VS.union
+        (get_program_vars_helper (Numeric n1) examined)
+        (get_program_vars_helper (Numeric n2) examined)
+  | Boolean (Less (n1, n2)) ->
+      VS.union
+        (get_program_vars_helper (Numeric n1) examined)
+        (get_program_vars_helper (Numeric n2) examined)
+  | Boolean (BNTerm nterm) ->
+      if List.mem prog examined then VS.empty
+      else
+        List.fold_left
+          (fun a b -> VS.union a b)
+          VS.empty
+          (List.map
+             (fun expansion ->
+               get_program_vars_helper (Boolean expansion)
+                 (List.cons prog examined))
+             (NonTerminal.expand nterm))
+  | Stmt (Assign (v, n)) ->
+      VS.add (TermVar (T v)) (get_program_vars_helper (Numeric n) examined)
+  | Stmt (Seq (s1, s2)) ->
+      VS.union
+        (get_program_vars_helper (Stmt s1) examined)
+        (get_program_vars_helper (Stmt s2) examined)
+  | Stmt (ITE (b, s1, s2)) ->
+      VS.union
+        (get_program_vars_helper (Boolean b) examined)
+        (VS.union
+           (get_program_vars_helper (Stmt s1) examined)
+           (get_program_vars_helper (Stmt s2) examined))
+  | Stmt (While (b, _, s)) ->
+      VS.union
+        (get_program_vars_helper (Boolean b) examined)
+        (get_program_vars_helper (Stmt s) examined)
+  | Stmt (SNTerm nterm) ->
+      if List.mem prog examined then VS.empty
+      else
+        List.fold_left
+          (fun a b -> VS.union a b)
+          VS.empty
+          (List.map
+             (fun expansion ->
+               get_program_vars_helper (Stmt expansion)
+                 (List.cons prog examined))
+             (NonTerminal.expand nterm))
+
+let get_program_vars prog =
+  match prog with
+  | Numeric _ -> VS.add (TermVar ET) (get_program_vars_helper prog [])
+  | Boolean _ -> VS.add (BoolVar BT) (get_program_vars_helper prog [])
+  | Stmt _ -> get_program_vars_helper prog []
+
 (* Returns vars (as formula vars) whose values may be changed by any program in the set.
    This is good to have for the adapt rule. *)
 let rec reassigned_vars_helper prog examined =
@@ -108,6 +253,13 @@ let rec reassigned_vars_helper prog examined =
 let reassigned_vars prog =
   VS.add (TermVar ET)
     (VS.add (BoolVar BT) (reassigned_vars_helper prog SNTS.empty))
+
+(* Returns set of reassigned vars excluding ET and BT, unless the program is a bool or int *)
+let reassigned_vars_clean prog =
+  match prog with
+  | Numeric _ -> VS.add (TermVar ET) (reassigned_vars_helper prog SNTS.empty)
+  | Boolean _ -> VS.add (BoolVar BT) (reassigned_vars_helper prog SNTS.empty)
+  | Stmt _ -> reassigned_vars_helper prog SNTS.empty
 
 (* Substitution of nonterminals according to given grammar. Useful when recursively defining grammars. *)
 type grammar = {
@@ -187,3 +339,91 @@ let subs_nonterms lazy_grammar program =
   | Numeric n -> Numeric (subs_nonterms_numeric lazy_grammar n)
   | Boolean b -> Boolean (subs_nonterms_boolean lazy_grammar b)
   | Stmt s -> Stmt (subs_nonterms_stmt lazy_grammar s)
+
+let rec get_nonterms_helper prog grm =
+  match prog with
+  | Numeric (Int _) -> grm
+  | Numeric (Var _) -> grm
+  | Numeric (Plus (n1, n2)) ->
+      get_nonterms_helper (Numeric n2) (get_nonterms_helper (Numeric n1) grm)
+  | Numeric (ITE (b, n1, n2)) ->
+      get_nonterms_helper (Boolean b)
+        (get_nonterms_helper (Numeric n1)
+           (get_nonterms_helper (Numeric n2) grm))
+  | Numeric (NNTerm nterm) ->
+      if List.mem nterm grm.grammar_num then grm
+      else
+        List.fold_left
+          (fun gram num -> get_nonterms_helper (Numeric num) gram)
+          {
+            grammar_num = List.cons nterm grm.grammar_num;
+            grammar_bool = grm.grammar_bool;
+            grammar_stmt = grm.grammar_stmt;
+          }
+          (expand nterm)
+  | Boolean True -> grm
+  | Boolean False -> grm
+  | Boolean (Not b) -> get_nonterms_helper (Boolean b) grm
+  | Boolean (And (b1, b2)) ->
+      get_nonterms_helper (Boolean b1) (get_nonterms_helper (Boolean b2) grm)
+  | Boolean (Or (b1, b2)) ->
+      get_nonterms_helper (Boolean b1) (get_nonterms_helper (Boolean b2) grm)
+  | Boolean (Equals (n1, n2)) ->
+      get_nonterms_helper (Numeric n1) (get_nonterms_helper (Numeric n2) grm)
+  | Boolean (Less (n1, n2)) ->
+      get_nonterms_helper (Numeric n1) (get_nonterms_helper (Numeric n2) grm)
+  | Boolean (BNTerm nterm) ->
+      if List.mem nterm grm.grammar_bool then grm
+      else
+        List.fold_left
+          (fun gram bol -> get_nonterms_helper (Boolean bol) gram)
+          {
+            grammar_num = grm.grammar_num;
+            grammar_bool = List.cons nterm grm.grammar_bool;
+            grammar_stmt = grm.grammar_stmt;
+          }
+          (expand nterm)
+  | Stmt (Assign (_, n)) -> get_nonterms_helper (Numeric n) grm
+  | Stmt (Seq (s1, s2)) ->
+      get_nonterms_helper (Stmt s1) (get_nonterms_helper (Stmt s2) grm)
+  | Stmt (ITE (b, s1, s2)) ->
+      get_nonterms_helper (Boolean b)
+        (get_nonterms_helper (Stmt s1) (get_nonterms_helper (Stmt s2) grm))
+  | Stmt (While (b, _, s)) ->
+      get_nonterms_helper (Boolean b) (get_nonterms_helper (Stmt s) grm)
+  | Stmt (SNTerm nterm) ->
+      if List.mem nterm grm.grammar_stmt then grm
+      else
+        List.fold_left
+          (fun gram stmt -> get_nonterms_helper (Stmt stmt) gram)
+          {
+            grammar_num = grm.grammar_num;
+            grammar_bool = grm.grammar_bool;
+            grammar_stmt = List.cons nterm grm.grammar_stmt;
+          }
+          (expand nterm)
+
+let get_nonterms prog =
+  get_nonterms_helper prog
+    { grammar_num = []; grammar_bool = []; grammar_stmt = [] }
+
+(* Given a grammar, converts it to a pareseable string *)
+let grammar_to_parseable_str gram =
+  let ns =
+    List.map
+      (nonterminal_to_parseable_str_def "Int" (fun num ->
+           prog_to_parseable_str (Numeric num)))
+      gram.grammar_num
+  and bs =
+    List.map
+      (nonterminal_to_parseable_str_def "Bool" (fun bol ->
+           prog_to_parseable_str (Boolean bol)))
+      gram.grammar_bool
+  and ss =
+    List.map
+      (nonterminal_to_parseable_str_def "Stmt" (fun stmt ->
+           prog_to_parseable_str (Stmt stmt)))
+      gram.grammar_stmt
+  in
+  let alls = List.append ns (List.append bs ss) in
+  Printf.sprintf "[%s]" (String.concat "; " alls)

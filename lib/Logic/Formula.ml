@@ -1,6 +1,7 @@
 open Variable
 
 exception Subs_Type_Mismatch
+exception Unsupported_Output
 
 (* exception Subs_Exp_In_Quant *)
 exception Set_Index_Inside_Predicate
@@ -96,7 +97,70 @@ let rec form_tostr form =
 and exp_tostr exp =
   match exp with Term t -> term_tostr t | Boolean b -> form_tostr b
 
-(* Forall constructors that do not quantify over the variable if it is never used. Also, some helpers.*)
+(* toStr Methods in a format that can be read back in *)
+let rec term_to_parseable_str term =
+  match term with
+  | Int i -> Printf.sprintf "%d" i
+  | TVar v -> var_tostr (TermVar v)
+  | ATVar (App (at, i)) ->
+      Printf.sprintf "%s[%s]" (var_tostr (ATermVar at))
+        (term_to_parseable_str i)
+  | ATVar (UnApp at) -> Printf.sprintf "%s[?]" (var_tostr (ATermVar at))
+  | Minus t -> Printf.sprintf "(%s)" (term_to_parseable_str t)
+  | Plus (t1, t2) ->
+      Printf.sprintf "(%s + %s)" (term_to_parseable_str t1)
+        (term_to_parseable_str t2)
+
+let rec form_to_parseable_str form =
+  match form with
+  | True -> "true"
+  | False -> "false"
+  | And (b1, b2) ->
+      Printf.sprintf "(and %s %s)" (form_to_parseable_str b1)
+        (form_to_parseable_str b2)
+  | Or (b1, b2) ->
+      Printf.sprintf "(or %s %s)" (form_to_parseable_str b1)
+        (form_to_parseable_str b2)
+  | Not b -> Printf.sprintf "(not %s)" (form_to_parseable_str b)
+  | Implies (b1, b2) ->
+      Printf.sprintf "(=> %s %s)" (form_to_parseable_str b1)
+        (form_to_parseable_str b2)
+  | BVar v -> var_tostr (BoolVar v)
+  | ABVar (App (ab, i)) ->
+      Printf.sprintf "%s[%s]" (var_tostr (ABoolVar ab))
+        (term_to_parseable_str i)
+  | ABVar (UnApp ab) -> Printf.sprintf "%s[?]" (var_tostr (ABoolVar ab))
+  | Equals (t1, t2) ->
+      Printf.sprintf "(= %s %s)" (term_to_parseable_str t1)
+        (term_to_parseable_str t2)
+  | Less (t1, t2) ->
+      Printf.sprintf "(< %s %s)" (term_to_parseable_str t1)
+        (term_to_parseable_str t2)
+  | Iff (f1, f2) ->
+      Printf.sprintf "(<-> %s %s)" (form_to_parseable_str f1)
+        (form_to_parseable_str f2)
+  | Exists (v, b) ->
+      Printf.sprintf "((Exists %s %s). %s)" (var_tostr v)
+        (match v with
+        | TermVar _ -> "Int"
+        | ATermVar _ -> "AInt"
+        | BoolVar _ -> "Bool"
+        | ABoolVar _ -> "ABool")
+        (form_to_parseable_str b)
+  | Forall (v, b) ->
+      Printf.sprintf "((Forall %s %s). %s)" (var_tostr v)
+        (match v with
+        | TermVar _ -> "Int"
+        | ATermVar _ -> "AInt"
+        | BoolVar _ -> "Bool"
+        | ABoolVar _ -> "ABool")
+        (form_to_parseable_str b)
+  | _ -> raise Unsupported_Output
+
+(* and exp_to_parseable_str exp =
+   match exp with Term t -> term_to_parseable_str t | Boolean b -> form_to_parseable_str b *)
+
+(* Forall constructor that does not quantify over the variable if it is never used. Also, some helpers.*)
 let rec is_new_var exp var_str =
   match exp with
   | Boolean True -> true
@@ -335,6 +399,39 @@ and set_exp_index holey_exp index =
   | Term t -> Term (set_term_index t index)
   | Boolean b -> Boolean (set_form_index b index)
 
+(* Compute maximum index referenced if they are all ints. *)
+let max a b = if a > b then a else b
+
+let rec max_index_helper current_max exp =
+  match exp with
+  | Term (ATVar (App (_, Int i))) -> max current_max i
+  | Term (Minus t) -> max_index_helper current_max (Term t)
+  | Term (Plus (t1, t2)) ->
+      max_index_helper (max_index_helper current_max (Term t2)) (Term t1)
+  | Boolean (ABVar (App (_, Int i))) -> max current_max i
+  | Boolean (And (f1, f2)) ->
+      max_index_helper (max_index_helper current_max (Boolean f2)) (Boolean f1)
+  | Boolean (Or (f1, f2)) ->
+      max_index_helper (max_index_helper current_max (Boolean f2)) (Boolean f1)
+  | Boolean (Not f) -> max_index_helper current_max (Boolean f)
+  | Boolean (Implies (f1, f2)) ->
+      max_index_helper (max_index_helper current_max (Boolean f2)) (Boolean f1)
+  | Boolean (Equals (t1, t2)) ->
+      max_index_helper (max_index_helper current_max (Term t2)) (Term t1)
+  | Boolean (Less (t1, t2)) ->
+      max_index_helper (max_index_helper current_max (Term t2)) (Term t1)
+  | Boolean (Iff (f1, f2)) ->
+      max_index_helper (max_index_helper current_max (Boolean f2)) (Boolean f1)
+  | Boolean (Exists (_, f)) -> max_index_helper current_max (Boolean f)
+  | Boolean (Forall (_, f)) -> max_index_helper current_max (Boolean f)
+  | Boolean (Hole (_, el)) ->
+      List.fold_left (fun cur exp -> max_index_helper cur exp) current_max el
+  | Boolean (T (f, _, _)) -> max_index_helper current_max (Boolean f)
+  | Boolean (TPrime f) -> max_index_helper current_max (Boolean f)
+  | _ -> current_max
+
+let max_index exp = max_index_helper 0 exp
+
 (* Given a term, a term_var to replace, and a newt term to replace it with, does the replacement. *)
 let rec subs_term_simple term oldv newt =
   match (term, newt) with
@@ -424,7 +521,7 @@ let rec subs form oldv newe =
               | Term t, TermVar old, Term tterm ->
                   Term (subs_term_simple t old tterm)
               | Term t, ATermVar old, Term tterm ->
-                  Term (subs_term_vector_state t old tterm)
+                Term (subs_term_vector_state t old tterm)
               | Term _, BoolVar _, _ -> arg
               | Term _, ABoolVar _, _ -> arg)
             arg_list )

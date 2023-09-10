@@ -1,0 +1,2 @@
+[Int Start : [x, y, z, 0, 1, (+ Nonterm Start Nonterm Start)] : Some ([] : (Hole: hole_Start [AInt e_t, AInt x, AInt y, AInt z]))] 
+ {|(and (and (and (and (and (and (and (and (and (and (and (and true (= x[1] 0)) (= y[1] 0)) (= z[1] 0)) (= x[2] 1)) (= y[2] 0)) (= z[2] 0)) (= x[3] 0)) (= y[3] 1)) (= z[3] 0)) (= x[4] 0)) (= y[4] -1)) (= z[4] 0))|} Int Nonterm Start {|(not (and (and (and (and true (= e_t[1] 0)) (= e_t[2] 1)) (= e_t[3] 1)) (= e_t[4] 1)))|}

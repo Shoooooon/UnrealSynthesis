@@ -5,4 +5,4 @@
 
 (library
  (name ULSynth)
- (libraries re lwt lwt.unix z3 SMT2Parser Logic Programs))
+ (libraries re lwt lwt.unix z3 SMT2Parser Logic Programs Proofrules))

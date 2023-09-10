@@ -13,3 +13,6 @@ end
 module NoHoleSimpleImplicatorZ3 () : ImplicationHandler
 module HoleSynthSimpleImplicatorCVC5 () : ImplicationHandler
 module NoHoleVectorStateImplicatorVampire () : ImplicationHandler
+
+val finite_holes_implicator : int -> (module ImplicationHandler)
+val finite_holeless_implicator : int -> (module ImplicationHandler)
