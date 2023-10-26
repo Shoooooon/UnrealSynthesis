@@ -56,6 +56,14 @@ let subs_var current_var to_replace expression =
   in
   if repl then expression else current_var
 
+(* Create a new variable with newvar_name as its name of the same type as var 1. *)
+let new_var_of_same_type var1 newvar_name =
+  match var1 with
+  | BoolVar _ -> BoolVar (B newvar_name)
+  | ABoolVar _ -> ABoolVar (B newvar_name)
+  | TermVar _ -> TermVar (T newvar_name)
+  | ATermVar _ -> ATermVar (T newvar_name)
+
 (* let match_var var1 name =
    match current_var with
    | BoolVar BT -> name = "b_t"

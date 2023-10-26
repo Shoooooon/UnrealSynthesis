@@ -12,7 +12,7 @@ let speclist =
     ("-o", Arg.Set_string output_filename, "Set output filename.");
   ]
 
-let () =
+let[@landmark] main () =
   Arg.parse speclist (fun _ -> ()) usage_msg;
   let trp =
     Nopeparser.triple Nopelexer.read
@@ -25,3 +25,5 @@ let () =
   in
   let out_channel = open_out !output_filename in
   Printf.fprintf out_channel "%s" (trip_to_parseable_str trp)
+
+let () = main ()

@@ -26,6 +26,7 @@
 %token TRUE
 %token FALSE
 %token PLUS
+%token TIMES
 %token MINUS
 %token EQUALS
 %token IFF
@@ -96,19 +97,20 @@ form_arg:
 form_term:
   | i = INT {Int i}
   | ET {TVar ET}
-  | ET LEFT_SQUARE index=form_term RIGHT_SQUARE {ATVar (App (ET, index))}
+  | ET LEFT_SQUARE index=form_term RIGHT_SQUARE {ATVar (TApp (ET, index))}
   | s = STRING {TVar (T s)}
-  | s = STRING LEFT_SQUARE index=form_term RIGHT_SQUARE {ATVar (App (T s, index))}
+  | s = STRING LEFT_SQUARE index=form_term RIGHT_SQUARE {ATVar (TApp (T s, index))}
   | LEFT_PAREN MINUS t=form_term RIGHT_PAREN {Formula.Minus t}
   | LEFT_PAREN PLUS t1=form_term t2=form_term RIGHT_PAREN {Formula.Plus (t1, t2)}
+  | LEFT_PAREN TIMES t1=form_term t2=form_term RIGHT_PAREN {Formula.Times (t1, t2)}
 
 formula:
   | TRUE {True}
   | FALSE {False}
   | BT {BVar BT}
-  | BT LEFT_SQUARE index=form_term RIGHT_SQUARE {ABVar (App (BT, index))}
+  | BT LEFT_SQUARE index=form_term RIGHT_SQUARE {ABVar (BApp (BT, index))}
   | s = STRING {BVar (B s)}
-  | s = STRING LEFT_SQUARE index=form_term RIGHT_SQUARE {ABVar (App (B s, index))}
+  | s = STRING LEFT_SQUARE index=form_term RIGHT_SQUARE {ABVar (BApp (B s, index))}
   | LEFT_PAREN AND f1=formula f2=formula RIGHT_PAREN {And (f1, f2)}
   | LEFT_PAREN OR f1=formula f2=formula RIGHT_PAREN {Or (f1, f2)}
   | LEFT_PAREN NOT f=formula RIGHT_PAREN {Not f}
@@ -232,7 +234,7 @@ var:
   | ARRAY_BOOL_KWD BT {ABoolVar BT}
   
 formula_or_hole:
-  | LEFT_PAREN HOLE_KWD COLON s=STRING vl=vars_list RIGHT_PAREN {Hole (s, vl)}
+  | LEFT_PAREN HOLE_KWD COLON s=STRING vl=vars_list RIGHT_PAREN {BHole (s, vl)}
   | f=formula {f}
 
 vars_list:
@@ -248,7 +250,7 @@ var_as_exp:
   | BOOL_KWD BT {Logic.Formula.Boolean (BVar BT)}
   | INT_KWD s=STRING {Term (TVar (T s))}
   | BOOL_KWD s=STRING {Logic.Formula.Boolean (BVar (B s))}
-  | ARRAY_INT_KWD ET {Term (ATVar (UnApp ET))}
-  | ARRAY_BOOL_KWD BT {Logic.Formula.Boolean (ABVar (UnApp BT))}
-  | ARRAY_INT_KWD s=STRING {Term (ATVar (UnApp (T s)))}
-  | ARRAY_BOOL_KWD s=STRING {Logic.Formula.Boolean (ABVar (UnApp (B s)))}
+  | ARRAY_INT_KWD ET {Term (ATVar (TUnApp ET))}
+  | ARRAY_BOOL_KWD BT {Logic.Formula.Boolean (ABVar (BUnApp BT))}
+  | ARRAY_INT_KWD s=STRING {Term (ATVar (TUnApp (T s)))}
+  | ARRAY_BOOL_KWD s=STRING {Logic.Formula.Boolean (ABVar (BUnApp (B s)))}

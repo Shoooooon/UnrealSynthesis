@@ -31,6 +31,7 @@ rule read =
   | "and" {AND}
   | "or" {OR}
   | "+" {PLUS}
+  | "*" {TIMES}
   | "-" {MINUS}
   | "=" {EQUALS}
   | "<->" {IFF}

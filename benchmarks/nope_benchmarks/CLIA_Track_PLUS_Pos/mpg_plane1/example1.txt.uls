@@ -1,0 +1,2 @@
+[Int Start : [x, y, 0, 1, (if Nonterm NT4 then Nonterm Start else Nonterm Start)] : Some ([] : (Hole: hole_Start [AInt e_t, AInt x, AInt y])); Bool NT4 : [(not (< Nonterm Start Nonterm Start)), (not (< Nonterm Start Nonterm Start))] : Some ([] : (Hole: hole_NT4 [ABool b_t, AInt x, AInt y]))] 
+ {|(and (and true (= x[1] 17)) (= y[1] -6))|} Int Nonterm Start {|(not (and true (= e_t[1] 11)))|}

@@ -40,8 +40,8 @@ examples_to_pre_post:
     vl=vars_list il=int_list {
       (match (List.fold_left (fun (index, form, outs, vars) integer ->
           (match vars with
-          | [] -> (index + 1, form, Logic.Formula.And (outs, (Equals(ATVar (App (ET, Int index)), (Int integer)))), vl)
-          | (hd::tl) -> (index, Logic.Formula.And (form, Equals(ATVar (App ((T hd), Int index)), (Int integer))), outs, tl)))
+          | [] -> (index + 1, form, Logic.Formula.And (outs, (Equals (ATVar (TApp (ET, Int index)), (Int integer)))), vl)
+          | (hd::tl) -> (index, Logic.Formula.And (form, Equals (ATVar (TApp ((T hd), Int index)), (Int integer))), outs, tl)))
           (1, Logic.Formula.True, Logic.Formula.True, vl)
           il) with
           | (_, pre, post, _) -> (pre, Not post))
@@ -74,17 +74,18 @@ prog:
       in
       let strongest_maker nterm_prog =
         lazy (let name = (match nterm_prog with | Numeric (NNTerm n) -> (Programs.NonTerminal.name n) | Boolean (BNTerm b) -> (Programs.NonTerminal.name b) | Stmt (SNTerm s) -> (Programs.NonTerminal.name s) | _ -> raise Bad) in
-        let reassigned_vars = (reassigned_vars_clean nterm_prog) 
+        let reassigned_vars = reassigned_vars_clean nterm_prog in
+        let reassigned_pairs = (List.filter (fun (x, _) -> (VS.mem x (reassigned_vars))) pairs) 
         in
-        let reassigned_vars_and_copies = (List.fold_left (fun set (x,y) -> VS.add x (VS.add y set)) VS.empty (List.filter (fun (x, _) -> (VS.mem x reassigned_vars)) pairs))
+        let reassigned_vars_and_copies = (List.fold_left (fun set (x,y) -> VS.add x (VS.add y set)) VS.empty reassigned_pairs)
 (*        (List.fold_left (fun lst (a,b) -> List.cons a (List.cons b lst)) [] (List.filter (fun (x, _) -> (VS.mem x reassigned_vars)) pairs))*) 
         and program_vars = (get_program_vars nterm_prog) in
-        Some ((List.filter (fun (x, _) -> (VS.mem x reassigned_vars)) pairs), 
-        Hole ((Printf.sprintf "hole_%s" name), 
-        (List.map (fun x -> match x with TermVar ET -> (Term (ATVar (UnApp ET))) 
-          | TermVar (T t) -> (Term (ATVar (UnApp (T t)))) 
-          | BoolVar BT -> (Boolean (ABVar (UnApp BT)))
-          | BoolVar (B b) -> (Boolean (ABVar (UnApp (B b))))
+        Some (reassigned_pairs, 
+        BHole ((Printf.sprintf "hole_%s" name), 
+        (List.map (fun x -> match x with TermVar ET -> (Term (ATVar (TUnApp ET))) 
+          | TermVar (T t) -> (Term (ATVar (TUnApp (T t)))) 
+          | BoolVar BT -> (Boolean (ABVar (BUnApp BT)))
+          | BoolVar (B b) -> (Boolean (ABVar (BUnApp (B b))))
           | _ -> raise Bad)
          (VS.elements (VS.remove (ABoolVar (B "b_t_cpy")) (VS.remove (ATermVar (T "e_t_cpy")) (VS.union program_vars reassigned_vars_and_copies))))
          )))) 

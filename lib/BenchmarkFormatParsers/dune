@@ -6,4 +6,6 @@
 (executable
  (public_name Nope2ULSynth)
  (name main)
- (libraries ULSynth Logic Programs Proofrules))
+ (libraries ULSynth Logic Programs Proofrules landmarks)
+ (instrumentation
+  (backend landmarks)))
