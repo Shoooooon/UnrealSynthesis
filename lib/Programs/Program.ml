@@ -135,93 +135,132 @@ let rec prog_to_parseable_str prog =
 (* Returns all vars mentioned in the program, including e_t or b_t only if the program is a numeric or bool. *)
 let rec get_program_vars_helper prog examined =
   match prog with
-  | Numeric (Int _) -> VS.empty
+  | Numeric (Int _) -> (VS.empty, examined)
   | Numeric (Var v) ->
-      VS.singleton (TermVar (match v with "e_t" -> ET | _ -> T v))
+      (VS.singleton (TermVar (match v with "e_t" -> ET | _ -> T v)), examined)
   | Numeric (Plus (n1, n2)) ->
-      VS.union
-        (get_program_vars_helper (Numeric n1) examined)
-        (get_program_vars_helper (Numeric n2) examined)
+      let lhs_set, lhs_examined =
+        get_program_vars_helper (Numeric n1) examined
+      in
+      let rhs_set, rhs_examined =
+        get_program_vars_helper (Numeric n2) lhs_examined
+      in
+      (VS.union lhs_set rhs_set, rhs_examined)
   | Numeric (ITE (b, n1, n2)) ->
-      VS.union
-        (get_program_vars_helper (Boolean b) examined)
-        (VS.union
-           (get_program_vars_helper (Numeric n1) examined)
-           (get_program_vars_helper (Numeric n2) examined))
+      let guard_set, guard_examined =
+        get_program_vars_helper (Boolean b) examined
+      in
+      let then_set, then_examined =
+        get_program_vars_helper (Numeric n1) guard_examined
+      in
+      let else_set, else_examined =
+        get_program_vars_helper (Numeric n2) then_examined
+      in
+      (VS.union guard_set (VS.union then_set else_set), else_examined)
   | Numeric (NNTerm nterm) ->
-      if List.mem prog examined then VS.empty
+      if List.mem prog examined then (VS.empty, examined)
       else
         List.fold_left
-          (fun a b -> VS.union a b)
-          VS.empty
-          (List.map
-             (fun expansion ->
-               get_program_vars_helper (Numeric expansion)
-                 (List.cons prog examined))
-             (NonTerminal.expand nterm))
-  | Boolean True -> VS.empty
-  | Boolean False -> VS.empty
+          (fun (vars, examined_already) expansion ->
+            let found_vars, examined_stuff =
+              get_program_vars_helper (Numeric expansion) examined_already
+            in
+            (VS.union vars found_vars, examined_stuff))
+          (VS.empty, List.cons prog examined)
+          (NonTerminal.expand nterm)
+  | Boolean True -> (VS.empty, examined)
+  | Boolean False -> (VS.empty, examined)
   | Boolean (Not b) -> get_program_vars_helper (Boolean b) examined
   | Boolean (And (b1, b2)) ->
-      VS.union
-        (get_program_vars_helper (Boolean b1) examined)
-        (get_program_vars_helper (Boolean b2) examined)
+      let lhs_set, lhs_examined =
+        get_program_vars_helper (Boolean b1) examined
+      in
+      let rhs_set, rhs_examined =
+        get_program_vars_helper (Boolean b2) lhs_examined
+      in
+      (VS.union lhs_set rhs_set, rhs_examined)
   | Boolean (Or (b1, b2)) ->
-      VS.union
-        (get_program_vars_helper (Boolean b1) examined)
-        (get_program_vars_helper (Boolean b2) examined)
+      let lhs_set, lhs_examined =
+        get_program_vars_helper (Boolean b1) examined
+      in
+      let rhs_set, rhs_examined =
+        get_program_vars_helper (Boolean b2) lhs_examined
+      in
+      (VS.union lhs_set rhs_set, rhs_examined)
   | Boolean (Equals (n1, n2)) ->
-      VS.union
-        (get_program_vars_helper (Numeric n1) examined)
-        (get_program_vars_helper (Numeric n2) examined)
+      let lhs_set, lhs_examined =
+        get_program_vars_helper (Numeric n1) examined
+      in
+      let rhs_set, rhs_examined =
+        get_program_vars_helper (Numeric n2) lhs_examined
+      in
+      (VS.union lhs_set rhs_set, rhs_examined)
   | Boolean (Less (n1, n2)) ->
-      VS.union
-        (get_program_vars_helper (Numeric n1) examined)
-        (get_program_vars_helper (Numeric n2) examined)
+      let lhs_set, lhs_examined =
+        get_program_vars_helper (Numeric n1) examined
+      in
+      let rhs_set, rhs_examined =
+        get_program_vars_helper (Numeric n2) lhs_examined
+      in
+      (VS.union lhs_set rhs_set, rhs_examined)
   | Boolean (BNTerm nterm) ->
-      if List.mem prog examined then VS.empty
+      if List.mem prog examined then (VS.empty, examined)
       else
         List.fold_left
-          (fun a b -> VS.union a b)
-          VS.empty
-          (List.map
-             (fun expansion ->
-               get_program_vars_helper (Boolean expansion)
-                 (List.cons prog examined))
-             (NonTerminal.expand nterm))
+          (fun (vars, examined_already) expansion ->
+            let found_vars, examined_stuff =
+              get_program_vars_helper (Boolean expansion) examined_already
+            in
+            (VS.union vars found_vars, examined_stuff))
+          (VS.empty, List.cons prog examined)
+          (NonTerminal.expand nterm)
   | Stmt (Assign (v, n)) ->
-      VS.add (TermVar (T v)) (get_program_vars_helper (Numeric n) examined)
+      let rhs_set, rhs_examined =
+        get_program_vars_helper (Numeric n) examined
+      in
+      (VS.add (TermVar (T v)) rhs_set, rhs_examined)
   | Stmt (Seq (s1, s2)) ->
-      VS.union
-        (get_program_vars_helper (Stmt s1) examined)
-        (get_program_vars_helper (Stmt s2) examined)
+      let lhs_set, lhs_examined = get_program_vars_helper (Stmt s1) examined in
+      let rhs_set, rhs_examined =
+        get_program_vars_helper (Stmt s2) lhs_examined
+      in
+      (VS.union lhs_set rhs_set, rhs_examined)
   | Stmt (ITE (b, s1, s2)) ->
-      VS.union
-        (get_program_vars_helper (Boolean b) examined)
-        (VS.union
-           (get_program_vars_helper (Stmt s1) examined)
-           (get_program_vars_helper (Stmt s2) examined))
+      let guard_set, guard_examined =
+        get_program_vars_helper (Boolean b) examined
+      in
+      let then_set, then_examined =
+        get_program_vars_helper (Stmt s1) guard_examined
+      in
+      let else_set, else_examined =
+        get_program_vars_helper (Stmt s2) then_examined
+      in
+      (VS.union guard_set (VS.union then_set else_set), else_examined)
   | Stmt (While (b, _, s)) ->
-      VS.union
-        (get_program_vars_helper (Boolean b) examined)
-        (get_program_vars_helper (Stmt s) examined)
+      let lhs_set, lhs_examined =
+        get_program_vars_helper (Boolean b) examined
+      in
+      let rhs_set, rhs_examined =
+        get_program_vars_helper (Stmt s) lhs_examined
+      in
+      (VS.union lhs_set rhs_set, rhs_examined)
   | Stmt (SNTerm nterm) ->
-      if List.mem prog examined then VS.empty
+      if List.mem prog examined then (VS.empty, examined)
       else
         List.fold_left
-          (fun a b -> VS.union a b)
-          VS.empty
-          (List.map
-             (fun expansion ->
-               get_program_vars_helper (Stmt expansion)
-                 (List.cons prog examined))
-             (NonTerminal.expand nterm))
+          (fun (vars, examined_already) expansion ->
+            let found_vars, examined_stuff =
+              get_program_vars_helper (Stmt expansion) examined_already
+            in
+            (VS.union vars found_vars, examined_stuff))
+          (VS.empty, List.cons prog examined)
+          (NonTerminal.expand nterm)
 
 let get_program_vars prog =
   match prog with
-  | Numeric _ -> VS.add (TermVar ET) (get_program_vars_helper prog [])
-  | Boolean _ -> VS.add (BoolVar BT) (get_program_vars_helper prog [])
-  | Stmt _ -> get_program_vars_helper prog []
+  | Numeric _ -> VS.add (TermVar ET) (fst (get_program_vars_helper prog []))
+  | Boolean _ -> VS.add (BoolVar BT) (fst (get_program_vars_helper prog []))
+  | Stmt _ -> fst (get_program_vars_helper prog [])
 
 (* Returns vars (as formula vars) whose values may be changed by any program in the set.
    This is good to have for the adapt rule. *)

@@ -1,0 +1,2 @@
+[Int Start : [x, y, 0, 1, (+ Nonterm Start Nonterm Start)] : Some ([] : exists ((a Int) (b Int) (c Int)) (and (= (+ c (+ (* a x[1]) (* b y[1]))) e_t[1]) (and (= (+ c (+ (* a x[2]) (* b y[2]))) e_t[2]) (= (+ c (+ (* a x[3]) (* b y[3]))) e_t[3]))))] 
+ {|(and (and (and (and (and (and true (= x[1] 0)) (= y[1] 0)) (= x[2] -4)) (= y[2] 0)) (= x[3] 5)) (= y[3] -9))|} Int Nonterm Start {|(not (and (and (and true (= e_t[1] 1)) (= e_t[2] -11)) (= e_t[3] 15)))|}

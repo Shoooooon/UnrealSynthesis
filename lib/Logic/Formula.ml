@@ -14,16 +14,12 @@ type term =
   | ATVar of term_array_app
   | Minus of term
   | Plus of term * term
+  | Times of term * term
+  | THole of string * exp list
 
-and term_array_app = App of term_array_var * term | UnApp of term_array_var
+and term_array_app = TApp of term_array_var * term | TUnApp of term_array_var
 
-module TS = Set.Make (struct
-  type t = term
-
-  let compare = compare
-end)
-
-type boolean_exp =
+and boolean_exp =
   | True
   | False
   | BVar of bool_var
@@ -37,7 +33,7 @@ type boolean_exp =
   | Iff of boolean_exp * boolean_exp (*Equals but for bools*)
   | Exists of variable * boolean_exp
   | Forall of variable * boolean_exp
-  | Hole of string * exp list
+  | BHole of string * exp list
   (* T and T' are predicate transformers.
      They should only be represented explicitly when applied to a hole.
      For T, since we are mapping program variables to fresh variables and we want this to be reversible,
@@ -49,10 +45,23 @@ type boolean_exp =
       * term_array_var VMap_AT.t
   | TPrime of boolean_exp
 
-and bool_array_app = App of bool_array_var * term | UnApp of bool_array_var
+and bool_array_app = BApp of bool_array_var * term | BUnApp of bool_array_var
 and exp = Term of term | Boolean of boolean_exp
 
+module TS = Set.Make (struct
+  type t = term
+
+  let compare = compare
+end)
+
 type formula = boolean_exp
+
+let var_to_exp var =
+  match var with
+  | BoolVar b -> Boolean (BVar b)
+  | ABoolVar b -> Boolean (ABVar (BUnApp b))
+  | TermVar t -> Term (TVar t)
+  | ATermVar t -> Term (ATVar (TUnApp t))
 
 (* Specialty Constructors for parsing - TODO make exists and forall quantify more than 1 variable*)
 
@@ -61,13 +70,17 @@ let rec term_tostr term =
   match term with
   | Int i -> Printf.sprintf "%d" i
   | TVar v -> var_tostr (TermVar v)
-  | ATVar (App (at, i)) ->
+  | ATVar (TApp (at, i)) ->
       Printf.sprintf "%s[%s]" (var_tostr (ATermVar at)) (term_tostr i)
-  | ATVar (UnApp at) -> Printf.sprintf "%s[?]" (var_tostr (ATermVar at))
+  | ATVar (TUnApp at) -> Printf.sprintf "%s[?]" (var_tostr (ATermVar at))
   | Minus t -> Printf.sprintf "(%s)" (term_tostr t)
   | Plus (t1, t2) -> Printf.sprintf "(%s + %s)" (term_tostr t1) (term_tostr t2)
+  | Times (t1, t2) -> Printf.sprintf "(%s * %s)" (term_tostr t1) (term_tostr t2)
+  | THole (s, arg_list) ->
+      Printf.sprintf "(%s (%s))" s
+        (String.concat ", " (List.map exp_tostr arg_list))
 
-let rec form_tostr form =
+and form_tostr form =
   match form with
   | True -> "T"
   | False -> "F"
@@ -77,9 +90,9 @@ let rec form_tostr form =
   | Implies (b1, b2) ->
       Printf.sprintf "(%s => %s)" (form_tostr b1) (form_tostr b2)
   | BVar v -> var_tostr (BoolVar v)
-  | ABVar (App (ab, i)) ->
+  | ABVar (BApp (ab, i)) ->
       Printf.sprintf "%s[%s]" (var_tostr (ABoolVar ab)) (term_tostr i)
-  | ABVar (UnApp ab) -> Printf.sprintf "%s[?]" (var_tostr (ABoolVar ab))
+  | ABVar (BUnApp ab) -> Printf.sprintf "%s[?]" (var_tostr (ABoolVar ab))
   | Equals (t1, t2) ->
       Printf.sprintf "(%s == %s)" (term_tostr t1) (term_tostr t2)
   | Less (t1, t2) -> Printf.sprintf "(%s < %s)" (term_tostr t1) (term_tostr t2)
@@ -88,7 +101,7 @@ let rec form_tostr form =
       Printf.sprintf "((Exists %s). %s)" (var_tostr v) (form_tostr b)
   | Forall (v, b) ->
       Printf.sprintf "((Forall %s). %s)" (var_tostr v) (form_tostr b)
-  | Hole (s, arg_list) ->
+  | BHole (s, arg_list) ->
       Printf.sprintf "(%s (%s))" s
         (String.concat ", " (List.map exp_tostr arg_list))
   | T (f, _, _) -> Printf.sprintf "T (%s)" (form_tostr f)
@@ -102,14 +115,18 @@ let rec term_to_parseable_str term =
   match term with
   | Int i -> Printf.sprintf "%d" i
   | TVar v -> var_tostr (TermVar v)
-  | ATVar (App (at, i)) ->
+  | ATVar (TApp (at, i)) ->
       Printf.sprintf "%s[%s]" (var_tostr (ATermVar at))
         (term_to_parseable_str i)
-  | ATVar (UnApp at) -> Printf.sprintf "%s[?]" (var_tostr (ATermVar at))
+  | ATVar (TUnApp at) -> Printf.sprintf "%s[?]" (var_tostr (ATermVar at))
   | Minus t -> Printf.sprintf "(%s)" (term_to_parseable_str t)
   | Plus (t1, t2) ->
       Printf.sprintf "(%s + %s)" (term_to_parseable_str t1)
         (term_to_parseable_str t2)
+  | Times (t1, t2) ->
+      Printf.sprintf "(%s * %s)" (term_to_parseable_str t1)
+        (term_to_parseable_str t2)
+  | _ -> raise Unsupported_Output
 
 let rec form_to_parseable_str form =
   match form with
@@ -126,10 +143,10 @@ let rec form_to_parseable_str form =
       Printf.sprintf "(=> %s %s)" (form_to_parseable_str b1)
         (form_to_parseable_str b2)
   | BVar v -> var_tostr (BoolVar v)
-  | ABVar (App (ab, i)) ->
+  | ABVar (BApp (ab, i)) ->
       Printf.sprintf "%s[%s]" (var_tostr (ABoolVar ab))
         (term_to_parseable_str i)
-  | ABVar (UnApp ab) -> Printf.sprintf "%s[?]" (var_tostr (ABoolVar ab))
+  | ABVar (BUnApp ab) -> Printf.sprintf "%s[?]" (var_tostr (ABoolVar ab))
   | Equals (t1, t2) ->
       Printf.sprintf "(= %s %s)" (term_to_parseable_str t1)
         (term_to_parseable_str t2)
@@ -173,8 +190,8 @@ let rec is_new_var exp var_str =
   | Boolean (Implies (b1, b2)) ->
       is_new_var (Boolean b1) var_str && is_new_var (Boolean b2) var_str
   | Boolean (BVar v) -> var_tostr (BoolVar v) <> var_str
-  | Boolean (ABVar (UnApp v)) -> var_tostr (ABoolVar v) <> var_str
-  | Boolean (ABVar (App (v, i))) ->
+  | Boolean (ABVar (BUnApp v)) -> var_tostr (ABoolVar v) <> var_str
+  | Boolean (ABVar (BApp (v, i))) ->
       var_tostr (ABoolVar v) <> var_str && term_tostr i <> var_str
   | Boolean (Equals (t1, t2)) ->
       is_new_var (Term t1) var_str && is_new_var (Term t2) var_str
@@ -186,7 +203,7 @@ let rec is_new_var exp var_str =
       var_tostr v <> var_str && is_new_var (Boolean b) var_str
   | Boolean (Forall (v, b)) ->
       var_tostr v <> var_str && is_new_var (Boolean b) var_str
-  | Boolean (Hole (s, arg_list)) ->
+  | Boolean (BHole (s, arg_list)) ->
       List.for_all (fun arg -> is_new_var arg var_str) arg_list
       && s <> var_str (* Nice not to let new vars collide with hole names. *)
   | Boolean (T (f, b_loop, t_map)) ->
@@ -196,7 +213,7 @@ let rec is_new_var exp var_str =
               var_str <> var_tostr (ABoolVar b_old)
               && var_str <> var_tostr (ABoolVar b_new))
             (VMap_AB.bindings b_map) *)
-      && is_new_var (Boolean (ABVar (UnApp b_loop))) var_str
+      && is_new_var (Boolean (ABVar (BUnApp b_loop))) var_str
       && List.for_all
            (fun (t_old, t_new) ->
              var_str <> var_tostr (ATermVar t_old)
@@ -205,18 +222,121 @@ let rec is_new_var exp var_str =
   | Boolean (TPrime f) -> is_new_var (Boolean f) var_str
   | Term (Int _) -> true
   | Term (TVar v) -> var_tostr (TermVar v) <> var_str
-  | Term (ATVar (UnApp v)) -> var_tostr (ATermVar v) <> var_str
-  | Term (ATVar (App (v, i))) ->
+  | Term (ATVar (TUnApp v)) -> var_tostr (ATermVar v) <> var_str
+  | Term (ATVar (TApp (v, i))) ->
       var_tostr (ATermVar v) <> var_str && term_tostr i <> var_str
   | Term (Minus t) -> is_new_var (Term t) var_str
   | Term (Plus (t1, t2)) ->
       is_new_var (Term t1) var_str && is_new_var (Term t2) var_str
+  | Term (Times (t1, t2)) ->
+      is_new_var (Term t1) var_str && is_new_var (Term t2) var_str
+  | Term (THole (s, arg_list)) ->
+      List.for_all (fun arg -> is_new_var arg var_str) arg_list
+      && s <> var_str (* Nice not to let new vars collide with hole names. *)
+
+(* GENERAL UTILITIES *)
+(* Determines if the formula has an existential quantifier. *)
+let rec has_exists form =
+  match form with
+  | And (b1, b2) -> has_exists b1 || has_exists b2
+  | Or (b1, b2) -> has_exists b1 || has_exists b2
+  | Not b -> has_exists b
+  | Implies (b1, b2) -> has_exists b1 || has_exists b2
+  | Iff (b1, b2) -> has_exists b1 && has_exists b2
+  | Exists _ -> true
+  | Forall (_, b) -> has_exists b
+  | BHole (_, arg_list) ->
+      List.fold_left
+        (fun bol arg ->
+          bol && match arg with Term _ -> false | Boolean b -> has_exists b)
+        false arg_list
+  | T (f, _, _) -> has_exists f
+  | TPrime f -> has_exists f
+  | _ -> false
+
+(* Determining which variables are free *)
+let rec free_vars_term term bound_vars =
+  match term with
+  | Int _ -> VS.empty
+  | TVar v ->
+      if VS.mem (TermVar v) bound_vars then VS.empty
+      else VS.singleton (TermVar v)
+  | ATVar (TUnApp at) ->
+      if VS.mem (ATermVar at) bound_vars then VS.empty
+      else VS.singleton (ATermVar at)
+  | ATVar (TApp (at, i)) ->
+      VS.union
+        (if VS.mem (ATermVar at) bound_vars then VS.empty
+         else VS.singleton (ATermVar at))
+        (free_vars_term i bound_vars)
+  | Minus t -> free_vars_term t bound_vars
+  | Plus (t1, t2) ->
+      VS.union (free_vars_term t1 bound_vars) (free_vars_term t2 bound_vars)
+  | Times (t1, t2) ->
+      VS.union (free_vars_term t1 bound_vars) (free_vars_term t2 bound_vars)
+  | THole (_, arg_list) ->
+      List.fold_left
+        (fun set arg -> VS.union set (free_vars_exp arg bound_vars))
+        VS.empty arg_list
+
+and free_vars form bound_vars =
+  match form with
+  | True -> VS.empty
+  | False -> VS.empty
+  | And (b1, b2) -> VS.union (free_vars b1 bound_vars) (free_vars b2 bound_vars)
+  | Or (b1, b2) -> VS.union (free_vars b1 bound_vars) (free_vars b2 bound_vars)
+  | Not b -> free_vars b bound_vars
+  | Implies (b1, b2) ->
+      VS.union (free_vars b1 bound_vars) (free_vars b2 bound_vars)
+  | BVar v ->
+      if VS.mem (BoolVar v) bound_vars then VS.empty
+      else VS.singleton (BoolVar v)
+  | ABVar (BUnApp ab) ->
+      if VS.mem (ABoolVar ab) bound_vars then VS.empty
+      else VS.singleton (ABoolVar ab)
+  | ABVar (BApp (ab, i)) ->
+      if VS.mem (ABoolVar ab) bound_vars then free_vars_term i bound_vars
+      else VS.add (ABoolVar ab) (free_vars_term i bound_vars)
+  | Equals (t1, t2) ->
+      VS.union (free_vars_term t1 bound_vars) (free_vars_term t2 bound_vars)
+  | Less (t1, t2) ->
+      VS.union (free_vars_term t1 bound_vars) (free_vars_term t2 bound_vars)
+  | Iff (b1, b2) -> VS.union (free_vars b1 bound_vars) (free_vars b2 bound_vars)
+  | Exists (v, b) -> free_vars b (VS.add v bound_vars)
+  | Forall (v, b) -> free_vars b (VS.add v bound_vars)
+  | BHole (_, arg_list) ->
+      List.fold_left
+        (fun set arg -> VS.union set (free_vars_exp arg bound_vars))
+        VS.empty arg_list
+  | T (f, b_loop, t_map) ->
+      VS.add (ABoolVar b_loop)
+        (VS.union (free_vars f bound_vars)
+           (VMap_AT.bindings t_map |> List.split
+           |> (fun (a, b) -> List.append a b)
+           |> List.map (fun v -> ATermVar v)
+           |> VS.of_list))
+  | TPrime f -> free_vars f bound_vars
+
+and free_vars_exp exp bound_vars =
+  match exp with
+  | Term t -> free_vars_term t bound_vars
+  | Boolean b -> free_vars b bound_vars
 
 let fresh_var_name form exclude_set =
   let i = ref 1 in
+  let frees = VS.elements (free_vars form VS.empty) in
   while
     (not (is_new_var (Boolean form) (Printf.sprintf "fresh%d" !i)))
-    || List.mem (Printf.sprintf "fresh%d" !i) exclude_set
+    || List.exists
+         (fun free_var ->
+           String.starts_with
+             ~prefix:(Printf.sprintf "fresh%d" !i)
+             (var_tostr free_var))
+         frees
+    || List.exists
+         (fun excl ->
+           String.starts_with ~prefix:(Printf.sprintf "fresh%d" !i) excl)
+         exclude_set
   do
     i := !i + 1
   done;
@@ -230,24 +350,31 @@ let forall v form =
 (* Given a term, collects the set of all terms that appear as indices. *)
 let rec get_index_terms term =
   match term with
-  | ATVar (App (_, i)) -> TS.add i (get_index_terms i)
+  | ATVar (TApp (_, i)) -> TS.add i (get_index_terms i)
   | Minus t -> get_index_terms t
   | Plus (t1, t2) -> TS.union (get_index_terms t1) (get_index_terms t2)
+  | Times (t1, t2) -> TS.union (get_index_terms t1) (get_index_terms t2)
+  (* TODO: Technically, we need to handle THoles here. *)
   | _ -> TS.empty
 
 (* Given a term, an index term i and a map from vars to vars (x, y), replaces all occurrences of x[i] by y[i]. *)
 let rec subs_vector_vars_by_index_term term target_i
     (old_vars_to_new : term_array_var VMap_AT.t) =
   match term with
-  | ATVar (App (at, i)) ->
+  | ATVar (TApp (at, i)) ->
       if i = target_i && VMap_AT.mem at old_vars_to_new then
-        ATVar (App (VMap_AT.find at old_vars_to_new, i))
+        ATVar (TApp (VMap_AT.find at old_vars_to_new, i))
       else term
   | Minus t -> Minus (subs_vector_vars_by_index_term t target_i old_vars_to_new)
   | Plus (t1, t2) ->
       Plus
         ( subs_vector_vars_by_index_term t1 target_i old_vars_to_new,
           subs_vector_vars_by_index_term t2 target_i old_vars_to_new )
+  | Times (t1, t2) ->
+      Times
+        ( subs_vector_vars_by_index_term t1 target_i old_vars_to_new,
+          subs_vector_vars_by_index_term t2 target_i old_vars_to_new )
+  (* TODO: Technically, we need to handle THoles here. *)
   | _ -> term
 
 (* Given a term, a list of index terms i and a map from vars to vars (x, y), replaces all occurrences of x[i] by y[i]. *)
@@ -268,11 +395,11 @@ let rec t_transform form bloop (old_vars_to_new_term : term_array_var VMap_AT.t)
         List.append
           (List.map
              (fun (pos_list, conj) ->
-               (pos_list, And (Not (ABVar (App (bloop, term))), conj)))
+               (pos_list, And (Not (ABVar (BApp (bloop, term))), conj)))
              partial_perms_list)
           (List.map
              (fun (pos_list, conj) ->
-               (List.cons term pos_list, And (ABVar (App (bloop, term)), conj)))
+               (List.cons term pos_list, And (ABVar (BApp (bloop, term)), conj)))
              partial_perms_list))
       (get_index_terms t)
       [ ([], True) ]
@@ -285,7 +412,7 @@ let rec t_transform form bloop (old_vars_to_new_term : term_array_var VMap_AT.t)
             ( ABVar (App (bloop, i)),
               ABVar (App (VMap_AB.find ab old_vars_to_new_bool, i)) ),
           And (Not (ABVar (App (bloop, i))), ABVar (App (ab, i))) ) *)
-  | ABVar (UnApp _) -> raise Applying_Transformation_On_Incomplete_Index
+  | ABVar (BUnApp _) -> raise Applying_Transformation_On_Incomplete_Index
   | And (b1, b2) -> And (t_trns b1, t_trns b2)
   | Or (b1, b2) -> Or (t_trns b1, t_trns b2)
   | Not b -> Not (t_trns b)
@@ -333,7 +460,7 @@ let rec t_transform form bloop (old_vars_to_new_term : term_array_var VMap_AT.t)
         False make_substituted_phrases
   | Exists (v, b) -> Exists (v, t_trns b)
   | Forall (v, b) -> Forall (v, t_trns b)
-  | Hole _ -> T (form, bloop, old_vars_to_new_term)
+  | BHole _ -> T (form, bloop, old_vars_to_new_term)
   | T (_, _, _) -> form
   | TPrime _ -> form (*TODO: Make sure this is the correct behavior*)
   | _ -> form
@@ -344,12 +471,12 @@ let rec t_prime_transform form =
      E.g., x[i] = x[1] goes to bt[i] && bt[1] *)
   let t_prime_guard t =
     TS.fold
-      (fun index_term form -> And (form, ABVar (App (BT, index_term))))
+      (fun index_term form -> And (form, ABVar (BApp (BT, index_term))))
       (get_index_terms t) True
   in
   match form with
-  | ABVar (App (ab, i)) -> Implies (ABVar (App (BT, i)), ABVar (App (ab, i)))
-  | ABVar (UnApp _) -> raise Applying_Transformation_On_Incomplete_Index
+  | ABVar (BApp (ab, i)) -> Implies (ABVar (BApp (BT, i)), ABVar (BApp (ab, i)))
+  | ABVar (BUnApp _) -> raise Applying_Transformation_On_Incomplete_Index
   | And (b1, b2) -> And (t_prime_transform b1, t_prime_transform b2)
   | Or (b1, b2) -> Or (t_prime_transform b1, t_prime_transform b2)
   | Not b -> Not (t_prime_transform b)
@@ -359,7 +486,7 @@ let rec t_prime_transform form =
   | Less (t1, t2) -> Implies (t_prime_guard (Plus (t1, t2)), form)
   | Exists (v, b) -> Exists (v, t_prime_transform b)
   | Forall (v, b) -> Forall (v, t_prime_transform b)
-  | Hole _ -> TPrime form
+  | BHole _ -> TPrime form
   | T (_, _, _) -> form (*TODO: This is not the correct behavior; fix later.*)
   | TPrime _ -> form (*TODO: Not correct behavior.*)
   | _ -> form
@@ -368,12 +495,15 @@ let rec t_prime_transform form =
 (* For all term arrays which are indexed by a hole (UnApp's), set the index to the given term. *)
 let rec set_term_index holey_term index =
   match holey_term with
-  | ATVar (UnApp var) -> ATVar (App (var, index))
+  | ATVar (TUnApp var) -> ATVar (TApp (var, index))
   | Minus t -> Minus (set_term_index t index)
   | Plus (t1, t2) -> Plus (set_term_index t1 index, set_term_index t2 index)
+  | Times (t1, t2) -> Times (set_term_index t1 index, set_term_index t2 index)
+  | THole (s, arg_list) ->
+      THole (s, List.map (fun arg -> set_exp_index arg index) arg_list)
   | _ -> holey_term
 
-let rec set_form_index holey_form index =
+and set_form_index holey_form index =
   match holey_form with
   | True -> holey_form
   | False -> holey_form
@@ -383,15 +513,15 @@ let rec set_form_index holey_form index =
   | Implies (b1, b2) ->
       Implies (set_form_index b1 index, set_form_index b2 index)
   | BVar _ -> holey_form
-  | ABVar (UnApp var) -> ABVar (App (var, index))
-  | ABVar (App (ab, i)) -> ABVar (App (ab, set_term_index i index))
+  | ABVar (BUnApp var) -> ABVar (BApp (var, index))
+  | ABVar (BApp (ab, i)) -> ABVar (BApp (ab, set_term_index i index))
   | Equals (t1, t2) -> Equals (set_term_index t1 index, set_term_index t2 index)
   | Less (t1, t2) -> Less (set_term_index t1 index, set_term_index t2 index)
   | Iff (b1, b2) -> Iff (set_form_index b1 index, set_form_index b2 index)
   | Exists (v, b) -> Exists (v, set_form_index b index)
   | Forall (v, b) -> Forall (v, set_form_index b index)
-  | Hole (s, arg_list) ->
-      Hole (s, List.map (fun arg -> set_exp_index arg index) arg_list)
+  | BHole (s, arg_list) ->
+      BHole (s, List.map (fun arg -> set_exp_index arg index) arg_list)
   | _ -> raise Set_Index_Inside_Predicate
 
 and set_exp_index holey_exp index =
@@ -404,11 +534,15 @@ let max a b = if a > b then a else b
 
 let rec max_index_helper current_max exp =
   match exp with
-  | Term (ATVar (App (_, Int i))) -> max current_max i
+  | Term (ATVar (TApp (_, Int i))) -> max current_max i
   | Term (Minus t) -> max_index_helper current_max (Term t)
   | Term (Plus (t1, t2)) ->
       max_index_helper (max_index_helper current_max (Term t2)) (Term t1)
-  | Boolean (ABVar (App (_, Int i))) -> max current_max i
+  | Term (Times (t1, t2)) ->
+      max_index_helper (max_index_helper current_max (Term t2)) (Term t1)
+  | Term (THole (_, el)) ->
+      List.fold_left (fun cur exp -> max_index_helper cur exp) current_max el
+  | Boolean (ABVar (BApp (_, Int i))) -> max current_max i
   | Boolean (And (f1, f2)) ->
       max_index_helper (max_index_helper current_max (Boolean f2)) (Boolean f1)
   | Boolean (Or (f1, f2)) ->
@@ -424,7 +558,7 @@ let rec max_index_helper current_max exp =
       max_index_helper (max_index_helper current_max (Boolean f2)) (Boolean f1)
   | Boolean (Exists (_, f)) -> max_index_helper current_max (Boolean f)
   | Boolean (Forall (_, f)) -> max_index_helper current_max (Boolean f)
-  | Boolean (Hole (_, el)) ->
+  | Boolean (BHole (_, el)) ->
       List.fold_left (fun cur exp -> max_index_helper cur exp) current_max el
   | Boolean (T (f, _, _)) -> max_index_helper current_max (Boolean f)
   | Boolean (TPrime f) -> max_index_helper current_max (Boolean f)
@@ -436,23 +570,31 @@ let max_index exp = max_index_helper 0 exp
 let rec subs_term_simple term oldv newt =
   match (term, newt) with
   | TVar v, _ -> if v <> oldv then term else newt
-  | ATVar (App (at, i)), TVar v ->
-      if i = TVar oldv then ATVar (App (at, TVar v)) else term
+  | ATVar (TApp (at, i)), TVar v ->
+      if i = TVar oldv then ATVar (TApp (at, TVar v)) else term
   | Minus t, _ -> Minus (subs_term_simple t oldv newt)
   | Plus (t1, t2), _ ->
       Plus (subs_term_simple t1 oldv newt, subs_term_simple t2 oldv newt)
+  | Times (t1, t2), _ ->
+      Times (subs_term_simple t1 oldv newt, subs_term_simple t2 oldv newt)
+      (* TODO: Implement THole logic here. *)
   | _, _ -> term
 
 (*Takes term and swaps ATermVar with newt*)
 let rec subs_term_vector_state term oldv newt =
   match term with
-  | ATVar (App (at, i)) -> if at = oldv then set_term_index newt i else term
-  | ATVar (UnApp at) -> if at = oldv then newt else term
+  | ATVar (TApp (at, i)) -> if at = oldv then set_term_index newt i else term
+  | ATVar (TUnApp at) -> if at = oldv then newt else term
   | Minus t -> Minus (subs_term_vector_state t oldv newt)
   | Plus (t1, t2) ->
       Plus
         ( subs_term_vector_state t1 oldv newt,
           subs_term_vector_state t2 oldv newt )
+  | Times (t1, t2) ->
+      Times
+        ( subs_term_vector_state t1 oldv newt,
+          subs_term_vector_state t2 oldv newt )
+      (* TODO: Implement THole logic here. *)
   | _ -> term
 
 let rec subs form oldv newe =
@@ -469,14 +611,14 @@ let rec subs form oldv newe =
   | Implies (b1, b2), _, _ -> Implies (subs b1 oldv newe, subs b2 oldv newe)
   | BVar v, BoolVar old, Boolean b -> if v <> old then form else b
   | BVar _, _, _ -> form
-  | ABVar (App (ab, i)), ABoolVar bvs, Boolean newb ->
+  | ABVar (BApp (ab, i)), ABoolVar bvs, Boolean newb ->
       if ab = bvs then set_form_index newb i else form
-  | ABVar (UnApp ab), ABoolVar bvs, Boolean newb ->
+  | ABVar (BUnApp ab), ABoolVar bvs, Boolean newb ->
       if ab = bvs then newb else form
-  | ABVar (App (ab, i)), TermVar t, Term newt ->
-      ABVar (App (ab, subs_term_simple i t newt))
-  | ABVar (App (ab, i)), ATermVar vst, Term newt ->
-      ABVar (App (ab, subs_term_vector_state i vst newt))
+  | ABVar (BApp (ab, i)), TermVar t, Term newt ->
+      ABVar (BApp (ab, subs_term_simple i t newt))
+  | ABVar (BApp (ab, i)), ATermVar vst, Term newt ->
+      ABVar (BApp (ab, subs_term_vector_state i vst newt))
   | ABVar _, _, _ -> form
   | Equals (t1, t2), TermVar old, Term t ->
       Equals (subs_term_simple t1 old t, subs_term_simple t2 old t)
@@ -507,8 +649,8 @@ let rec subs form oldv newe =
            | Term (TVar vt) -> Exists (TermVar vt, subs b oldv newe)
            | Term (ATVar (UnApp vt)) -> Exists (ATermVar vt, subs b oldv newe)
            | _ -> raise Subs_Exp_In_Quant) *)
-  | Hole (s, arg_list), _, _ ->
-      Hole
+  | BHole (s, arg_list), _, _ ->
+      BHole
         ( s,
           List.map
             (fun arg ->
@@ -521,7 +663,7 @@ let rec subs form oldv newe =
               | Term t, TermVar old, Term tterm ->
                   Term (subs_term_simple t old tterm)
               | Term t, ATermVar old, Term tterm ->
-                Term (subs_term_vector_state t old tterm)
+                  Term (subs_term_vector_state t old tterm)
               | Term _, BoolVar _, _ -> arg
               | Term _, ABoolVar _, _ -> arg)
             arg_list )
@@ -542,7 +684,7 @@ let rec sub_holes (form : formula)
   | Iff (t1, t2) -> Iff (sub_holes t1 hole_map, sub_holes t2 hole_map)
   | Exists (v, b) -> Exists (v, sub_holes b hole_map)
   | Forall (v, b) -> Forall (v, sub_holes b hole_map)
-  | Hole (s, arg_list) ->
+  | BHole (s, arg_list) ->
       if List.exists (fun ((a, _), _) -> a = s) hole_map then
         let (_, old_args), body =
           List.find (fun ((a, _), _) -> a = s) hole_map

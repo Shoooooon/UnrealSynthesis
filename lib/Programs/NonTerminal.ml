@@ -66,7 +66,7 @@ let nonterminal_to_parseable_str_def nterm_type program_to_parseable_string
                   | _ -> raise Bad_Strongest)
                 v_pairs_list))
           (match form with
-          | Hole (name, exp_list) ->
+          | BHole (name, exp_list) ->
               Printf.sprintf "(Hole: %s [%s])" name
                 (String.concat ", "
                    (List.map
@@ -76,9 +76,9 @@ let nonterminal_to_parseable_str_def nterm_type program_to_parseable_string
                             Printf.sprintf "Int %s" (var_tostr (TermVar v))
                         | Boolean (BVar v) ->
                             Printf.sprintf "Bool %s" (var_tostr (BoolVar v))
-                        | Term (ATVar (UnApp v)) ->
+                        | Term (ATVar (TUnApp v)) ->
                             Printf.sprintf "AInt %s" (var_tostr (ATermVar v))
-                        | Boolean (ABVar (UnApp v)) ->
+                        | Boolean (ABVar (BUnApp v)) ->
                             Printf.sprintf "ABool %s" (var_tostr (ABoolVar v))
                         | _ -> raise Bad_Strongest)
                       exp_list))

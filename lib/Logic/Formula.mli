@@ -12,11 +12,13 @@ type term =
   | ATVar of term_array_app
   | Minus of term
   | Plus of term * term
+  | Times of term * term
+  | THole of string * exp list
 
-and term_array_app = App of term_array_var * term | UnApp of term_array_var
+and term_array_app = TApp of term_array_var * term | TUnApp of term_array_var
 
 (* Boolean_exps are boolean-valued expressions, also called formulas. *)
-type boolean_exp =
+and boolean_exp =
   | True
   | False
   | BVar of bool_var
@@ -30,7 +32,7 @@ type boolean_exp =
   | Iff of boolean_exp * boolean_exp (*Equals but for bools*)
   | Exists of variable * boolean_exp
   | Forall of variable * boolean_exp
-  | Hole of string * exp list
+  | BHole of string * exp list
   (* T and T' are predicate transformers.
      They should only be represented explicitly when applied to a hole.
      For T, since we are mapping program variables to fresh variables and we want this to be reversible,
@@ -38,13 +40,15 @@ type boolean_exp =
   | T of boolean_exp * bool_array_var * term_array_var VMap_AT.t
   | TPrime of boolean_exp
 
-and bool_array_app = App of bool_array_var * term | UnApp of bool_array_var
+and bool_array_app = BApp of bool_array_var * term | BUnApp of bool_array_var
 
 (* Exps are convenient to support holes and substitution. *)
 and exp = Term of term | Boolean of boolean_exp
 
 type formula = boolean_exp
 
+(* Converts a variable to the appropriate expression. *)
+val var_to_exp : variable -> exp
 val form_tostr : formula -> string
 
 (* Produces less readable but more pareseable output. *)
@@ -60,6 +64,10 @@ val subs : formula -> variable -> exp -> formula
 (* Given a formula and a list of (variable, expression) pairs, returns a formula where occurrences of the variable inside the input formula are replaced by the input expression.
    Note that subs will only overwrite free variables (e.g., (subs (a && \forall a. a) a b) -> b && \forall a. a *)
 val subs_several : formula -> (variable * exp) list -> formula
+
+(* True iff the formula contains an existential quantifier. *)
+val has_exists : formula -> bool
+val free_vars : formula -> VS.t -> VS.t
 
 (* Given a formula and a set of formula names to avoid, produces a name for a fresh variable. *)
 val fresh_var_name : formula -> string list -> string

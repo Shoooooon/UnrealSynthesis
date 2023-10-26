@@ -15,8 +15,8 @@ type formMode = SIMPLE | FINITE_VECTOR_STATE | VECTOR_STATE
    Reassigned_var_finder finds the reassigned vars from a given program; taking this as input lets us support simple and vector-state behaviors.
    If finite_vectors=0, vectors are treated as inifinte. Otherwise, they are treated as having length finite_vectors.*)
 
-let nonterm_handler_template expansion_to_prog nterm_to_prog (vector_state : bool) nterm ctrip
-    (finite_vectors : int)
+let nonterm_handler_template expansion_to_prog nterm_to_prog
+    (vector_state : bool) nterm ctrip (finite_vectors : int)
     (build_wpc_proof :
       contextualized_triple_no_pre ->
       (formula -> formula -> bool Lazy.t) ->
@@ -99,16 +99,16 @@ let nonterm_handler_template expansion_to_prog nterm_to_prog (vector_state : boo
                           Logic.Formula.And
                             ( form,
                               Iff
-                                ( ABVar (App (p, Int index)),
-                                  ABVar (App (g, Int index)) ) ))
+                                ( ABVar (BApp (p, Int index)),
+                                  ABVar (BApp (g, Int index)) ) ))
                         True
                         (List.init finite_vectors (fun x -> x + 1))
                     else
                       Forall
                         ( TermVar (T "i"),
                           Iff
-                            ( ABVar (App (p, TVar (T "i"))),
-                              ABVar (App (g, TVar (T "i"))) ) ) )
+                            ( ABVar (BApp (p, TVar (T "i"))),
+                              ABVar (BApp (g, TVar (T "i"))) ) ) )
             | ATermVar p, ATermVar g ->
                 Logic.Formula.And
                   ( form,
@@ -118,16 +118,16 @@ let nonterm_handler_template expansion_to_prog nterm_to_prog (vector_state : boo
                           Logic.Formula.And
                             ( form,
                               Equals
-                                ( ATVar (App (p, Int index)),
-                                  ATVar (App (g, Int index)) ) ))
+                                ( ATVar (TApp (p, Int index)),
+                                  ATVar (TApp (g, Int index)) ) ))
                         True
                         (List.init finite_vectors (fun x -> x + 1))
                     else
                       Forall
                         ( TermVar (T "i"),
                           Equals
-                            ( ATVar (App (p, TVar (T "i"))),
-                              ATVar (App (g, TVar (T "i"))) ) ) )
+                            ( ATVar (TApp (p, TVar (T "i"))),
+                              ATVar (TApp (g, TVar (T "i"))) ) ) )
             | _ -> raise (Bad_Strongest_Triple (prog_tostr trip.prog, "")))
           True var_pairs_list
       in
@@ -139,17 +139,42 @@ let nonterm_handler_template expansion_to_prog nterm_to_prog (vector_state : boo
       let var_pairs_list =
         List.append var_pairs_list
           (List.map
-             (fun x -> match x with
-             | TermVar y -> if (not vector_state) then (x, TermVar (T "unusedconstantvarthatshouldbereplacedbysomtehingrobustwhenpossible")) else
-              ((match y with | ET -> (ATermVar ET) | T v -> (ATermVar (T v))), ATermVar (T "unusedconstantvarthatshouldbereplacedbysomtehingrobustwhenpossible"))
-             | BoolVar y -> if (not vector_state) then (x, BoolVar (B "unusedconstantvarthatshouldbereplacedbysomtehingrobustwhenpossible")) else
-              ((match y with | BT -> (ABoolVar BT) | B v -> (ABoolVar (B v))), ABoolVar (B "unusedconstantvarthatshouldbereplacedbysomtehingrobustwhenpossible"))
-             | _ -> raise Unsupported_Var)
+             (fun x ->
+               match x with
+               | TermVar y ->
+                   if not vector_state then
+                     ( x,
+                       TermVar
+                         (T
+                            "unusedconstantvarthatshouldbereplacedbysomtehingrobustwhenpossible")
+                     )
+                   else
+                     ( (match y with ET -> ATermVar ET | T v -> ATermVar (T v)),
+                       ATermVar
+                         (T
+                            "unusedconstantvarthatshouldbereplacedbysomtehingrobustwhenpossible")
+                     )
+               | BoolVar y ->
+                   if not vector_state then
+                     ( x,
+                       BoolVar
+                         (B
+                            "unusedconstantvarthatshouldbereplacedbysomtehingrobustwhenpossible")
+                     )
+                   else
+                     ( (match y with BT -> ABoolVar BT | B v -> ABoolVar (B v)),
+                       ABoolVar
+                         (B
+                            "unusedconstantvarthatshouldbereplacedbysomtehingrobustwhenpossible")
+                     )
+               | _ -> raise Unsupported_Var)
              (List.filter
                 (fun var ->
-                  List.for_all (fun (a, _) -> a <> var) var_pairs_list)
+                  List.for_all
+                    (fun (a, _) -> var_tostr a <> var_tostr var)
+                    var_pairs_list)
                 (VS.elements (reassigned_vars_clean (nterm_to_prog nterm)))))
-      in      
+      in
       let adapted_pre_1, xyz_list =
         List.fold_left
           (fun (form, xyz_list) (prog_var, ghost_var) ->
@@ -166,15 +191,20 @@ let nonterm_handler_template expansion_to_prog nterm_to_prog (vector_state : boo
                 ( subs form prog_var (Boolean (BVar (B y))),
                   List.cons (prog_var, BoolVar (B y), ghost_var) xyz_list )
             | ABoolVar _ ->
-                ( subs form prog_var (Boolean (ABVar (UnApp (B y)))),
+                ( subs form prog_var (Boolean (ABVar (BUnApp (B y)))),
                   List.cons (prog_var, ABoolVar (B y), ghost_var) xyz_list )
             | ATermVar _ ->
-              ( subs form prog_var (Term (ATVar (UnApp (T y)))),
+                ( subs form prog_var (Term (ATVar (TUnApp (T y)))),
                   List.cons (prog_var, ATermVar (T y), ghost_var) xyz_list ))
           (postc, []) var_pairs_list
       in
-      (* List.iter (fun (x,y,z) -> print_endline (Printf.sprintf "%s - %s - %s" (var_tostr x) (var_tostr y) (var_tostr z))) xyz_list;
-      print_endline (form_tostr adapted_pre_1); *)
+      (* List.iter
+           (fun (x, y, z) ->
+             print_endline
+               (Printf.sprintf "%s - %s - %s" (var_tostr x) (var_tostr y)
+                  (var_tostr z)))
+           xyz_list;
+         print_endline (form_tostr adapted_pre_1); *)
       (* Q_0[y/x][x/z] *)
       let adapted_pre_2 =
         List.fold_left
@@ -182,8 +212,8 @@ let nonterm_handler_template expansion_to_prog nterm_to_prog (vector_state : boo
             match x with
             | TermVar x -> subs form z (Term (TVar x))
             | BoolVar x -> subs form z (Boolean (BVar x))
-            | ATermVar x -> subs form z (Term (ATVar (UnApp x)))
-            | ABoolVar x -> subs form z (Boolean (ABVar (UnApp x))))
+            | ATermVar x -> subs form z (Term (ATVar (TUnApp x)))
+            | ABoolVar x -> subs form z (Boolean (ABVar (BUnApp x))))
           adapted_pre_1 xyz_list
       in
       (* Q_0[y/x][x/z] \rightarrow Q[y/x] *)
@@ -195,8 +225,8 @@ let nonterm_handler_template expansion_to_prog nterm_to_prog (vector_state : boo
                 match y with
                 | TermVar yv -> subs form x (Term (TVar yv))
                 | BoolVar yv -> subs form x (Boolean (BVar yv))
-                | ATermVar yv -> subs form x (Term (ATVar (UnApp yv)))
-                | ABoolVar yv -> subs form x (Boolean (ABVar (UnApp yv))))
+                | ATermVar yv -> subs form x (Term (ATVar (TUnApp yv)))
+                | ABoolVar yv -> subs form x (Boolean (ABVar (BUnApp yv))))
               trip.post xyz_list )
       in
       (* \forall y. Q_0[y/x][x/z] \rightarrow Q[y/x] *)
@@ -289,15 +319,15 @@ let nonterm_handler_simple_stmt =
     false
 
 (* let simple_to_vector_state var_set =
-  VS.map
-    (fun var ->
-      match var with
-      | TermVar ET -> ATermVar ET
-      | TermVar (T x) -> ATermVar (T x)
-      | BoolVar BT -> ABoolVar BT
-      | BoolVar (B x) -> ABoolVar (B x)
-      | _ -> raise Unsupported_Var)
-    var_set *)
+   VS.map
+     (fun var ->
+       match var with
+       | TermVar ET -> ATermVar ET
+       | TermVar (T x) -> ATermVar (T x)
+       | BoolVar BT -> ABoolVar BT
+       | BoolVar (B x) -> ABoolVar (B x)
+       | _ -> raise Unsupported_Var)
+     var_set *)
 
 let nonterm_handler_vector_state_numeric =
   nonterm_handler_template
@@ -347,13 +377,13 @@ let simple_tv =
 let vector_state_tv =
   {
     et_var = ATermVar ET;
-    strvar_to_term = (fun x -> ATVar (UnApp (T x)));
+    strvar_to_term = (fun x -> ATVar (TUnApp (T x)));
     strvar_to_var_term = (fun x -> ATermVar (T x));
-    et_term = ATVar (UnApp ET);
+    et_term = ATVar (TUnApp ET);
     bt_var = ABoolVar BT;
     strvar_to_var_bool = (fun v -> ABoolVar (B v));
-    bt_form = ABVar (UnApp BT);
-    strvar_to_bool_form = (fun v -> ABVar (UnApp (B v)));
+    bt_form = ABVar (BUnApp BT);
+    strvar_to_bool_form = (fun v -> ABVar (BUnApp (B v)));
   }
 
 (* INT *)
@@ -899,10 +929,10 @@ let ite_vector_state_template prog_setter b a1 a2
               subs_several
                 (subs_several (get_conclusion else_hyp).trip.pre
                    (List.map
-                      (fun (x, z) -> (ATermVar x, Term (ATVar (UnApp z))))
+                      (fun (x, z) -> (ATermVar x, Term (ATVar (TUnApp z))))
                       x2z_map))
                 (List.map
-                   (fun (x, y) -> (ATermVar y, Term (ATVar (UnApp x))))
+                   (fun (x, y) -> (ATermVar y, Term (ATVar (TUnApp x))))
                    x2y_map);
           };
       }
@@ -922,10 +952,10 @@ let ite_vector_state_template prog_setter b a1 a2
               (let post_p1 =
                  subs_several (get_conclusion then_hyp).trip.pre
                    (List.map
-                      (fun (x, z) -> (ATermVar z, Term (ATVar (UnApp x))))
+                      (fun (x, z) -> (ATermVar z, Term (ATVar (TUnApp x))))
                       x2z_map)
                in
-               subs post_p1 (ABoolVar b_loop) (Boolean (ABVar (UnApp BT))));
+               subs post_p1 (ABoolVar b_loop) (Boolean (ABVar (BUnApp BT))));
             (* let i : term_var =
                  T (fresh_var_name post_p1 [ var_tostr (ABoolVar b_loop) ])
                in
@@ -933,7 +963,7 @@ let ite_vector_state_template prog_setter b a1 a2
                  ( Forall
                      ( TermVar i,
                        Iff
-                         (ABVar (App (BT, TVar i)), ABVar (App (b_loop, TVar i)))
+                         (ABVar (BApp (BT, TVar i)), ABVar (BApp (b_loop, TVar i)))
                      ),
                    post_p1 )); *)
           };
