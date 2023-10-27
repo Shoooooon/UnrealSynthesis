@@ -540,13 +540,14 @@ let parse_cvc5_func_decl definition_str =
 (* FUNCITONS FOR DISCHARGING QUERIES *)
 (* Spawn a process to check the implication.
    Return a blocking function that confirms implication is valid. *)
-type file_pair = { name_num : int; form : formula }
+type file_info = { name_number : int; formul : formula; truth: bool option }
+type file_pair = { name_num : int; form : formula}
 
 (* Sets up loggers and returns a function that can be used to check implication, assuming z3.
    Logging discharged implications saves on repeat computations.
    The implication function returned takes a hyp:formula and conclusion:formula and returns a bool lazy.*)
 let no_hole_simple_implicator_z3 () =
-  let file_logger = ref [] and file_counter = ref 0 in
+  let file_logger:(file_info list ref) = ref [] and file_counter = ref 0 in
   (* Utilities: *)
   (* Transforms variables to avoid 2 vars w same name *)
   let rec fresh_vars_all frm vset =
@@ -663,16 +664,15 @@ let no_hole_simple_implicator_z3 () =
       file_counter := !file_counter + 1
     done;
     (* If we have not dispatched a query for this implication... *)
-    if not (List.mem form (List.map (fun a -> a.form) !file_logger)) then (
+    if not (List.mem form (List.map (fun a -> a.formul) !file_logger)) then (
       let filename_pref =
         Printf.sprintf "Implication%d" !file_counter
-        (* String.map filename_map (form_tostr (form)) *)
       in
       (* Set up the file and record in the structure. *)
       let oc = open_out (Printf.sprintf "%s.smt" filename_pref) in
       Printf.fprintf oc "%s" (to_negated_smt_z3 form "test");
       close_out oc;
-      file_logger := List.cons { name_num = !file_counter; form } !file_logger;
+      file_logger := List.cons { name_number = !file_counter; formul=form; truth = None } !file_logger;
       file_counter := !file_counter + 1;
       (* Fork and exec a z3 query *)
       let kid_pid = Unix.fork () in
@@ -691,7 +691,6 @@ let no_hole_simple_implicator_z3 () =
               [ "cvc5"; "-L"; "smt2.6"; "--no-incremental"; "--no-type-checking"; "--no-interactive"; Printf.sprintf "%s.smt" filename_pref ])) *))
       else if
         (* If it makes sense to do so (i.e., there are existentially quantified variables and we have some variables we think they are functions of), discharge a backup sygus query as well. *)
-        (* false *)
         (has_exists form) && (not (VS.is_empty important_variables))
       then (
         (* Set up the file and record in the structure. *)
@@ -725,29 +724,30 @@ let no_hole_simple_implicator_z3 () =
                  b := Unix.waitpid [ Unix.WNOHANG ] kid_pid2;
                  fst !a = 0 && fst !b = 0
                do
-                 Unix.sleep 5
+                 Unix.sleep 1
                done;
-               if snd !a = Unix.WEXITED 0 && snd !b = Unix.WEXITED 0 then
+               if (fst !a) = kid_pid && ((snd !a) <> Unix.WEXITED 0) then (i:=!i+1; a:=(0, Unix.WEXITED 0)) else ();
+               if (fst !b) = kid_pid2 && ((snd !b) <> Unix.WEXITED 0) then (i:=!i+1; b:=(0, Unix.WEXITED 0)) else ();
+               if (fst !a) = kid_pid && (fst !b) = kid_pid2 then
+                (
                  let result =
                    In_channel.input_line (open_in (Printf.sprintf "%s.out" filename_pref))
                  in
                  if result = (Some "unsat") then (
                    i := 2;
                    out := true)
-                 else if result = (Some "sat") then (
+                 else (if result = (Some "sat") then (
                    i := 2)
                  else
-                   let result =
+                   (let result =
                     In_channel.input_line
                        (open_in (Printf.sprintf "%s.sy.out" filename_pref))
                    in
                    if result = (Some "(") then (
                      i := 2;
                      out := true)
-                   else if result = (Some "infeasible") then (
-                     i := !i + 1)
-                   else i := 2
-               else if snd !a = Unix.WEXITED 0 then
+                   else i := 2)))
+               else if fst !a = kid_pid then
                  let result =
                   In_channel.input_line (open_in (Printf.sprintf "%s.out" filename_pref))
                  in
@@ -757,7 +757,7 @@ let no_hole_simple_implicator_z3 () =
                  else if result = (Some "sat") then (
                    i := 2)
                  else i := !i + 1
-               else if snd !b = Unix.WEXITED 0 then
+               else if fst !b = kid_pid2 then
                  let result =
                   In_channel.input_line (open_in (Printf.sprintf "%s.sy.out" filename_pref))
                  in
@@ -765,34 +765,33 @@ let no_hole_simple_implicator_z3 () =
                    i := 2;
                    out := true)
                  else if result = (Some "infeasible") then (
-                   i := 2)
+                   i := !i + 1)
                  else i := !i + 1
                else (
                  i := 2)
              done;
+             file_logger := List.map (fun finfo -> if finfo.formul=form then {name_number=finfo.name_number; formul=form;truth=Some !out} else finfo) !file_logger;
              !out)
         (* Return function that collects SMT result *))
       else
-        lazy
+        lazy 
           (if Unix.waitpid [] kid_pid <> (kid_pid, WEXITED 0) then false
            else
              let result =
-               input_line (open_in (Printf.sprintf "%s.out" filename_pref))
+               In_channel.input_line (open_in (Printf.sprintf "%s.out" filename_pref))
              in
-             result = "unsat")
+             file_logger := List.map (fun finfo -> if finfo.formul=form then {name_number=finfo.name_number; formul=form;truth=(Some (result = (Some "unsat")))} else finfo) !file_logger;
+             result = (Some "unsat")))
       (* TODO: It might be good to have the below behavior be the default in both branches, but waitpid might be better. *)
-      (* If the query was already run, just read the result. *))
+      (* If the query was already run, just read the result. *)
     else
-      let name_num =
-        (List.find (fun a -> a.form = form) !file_logger).name_num
-      in
-      let filename_pref = Printf.sprintf "Implication%d" name_num in
-      lazy
-        (while not (Sys.file_exists (Printf.sprintf "%s.out" filename_pref)) do
+      lazy 
+        (while not (List.exists (fun a -> a.formul = form && a.truth != None) !file_logger) do
            Unix.sleep 1
          done;
-         let f_channel = open_in (Printf.sprintf "%s.out" filename_pref) in
-         input_line f_channel = "unsat")
+         match (List.find (fun a -> a.formul = form) !file_logger).truth with
+         | None -> false
+         | Some s -> s)
   in
   no_hole_verify
 
@@ -803,7 +802,6 @@ let no_hole_simple_implicator_z3 () =
 let implicator_hole_synth_cvc5 () =
   (* Create persistent context to track synthesis constraints. *)
   let constraint_logger = ref []
-  (* and varset = ref VS.empty *)
   and (synth_mapper : ((string * variable list) * formula) list option ref) =
     ref None
   and file_counter = ref 0
@@ -815,14 +813,12 @@ let implicator_hole_synth_cvc5 () =
       | Some s -> s
       | None ->
           (* Find distinct holes and rename vars (to write synth-invs later). Also set the synth-mapper.*)
-          (* List.iter print_endline (List.map form_tostr !constraint_logger); *)
           let varset =
             ref
               (List.fold_left
                  (fun set form -> VS.union set (free_vars form VS.empty))
                  VS.empty !constraint_logger)
           in
-          (* List.iter print_endline (List.map var_tostr (VS.elements !varset));           *)
           let constraints =
             List.flatten
               (List.map
@@ -918,11 +914,7 @@ let implicator_hole_synth_cvc5 () =
       (* If holes are present, add the constraints to our constraint list.
          We will wait to deconjunctivize until we know all free variables involved (i.e., until the query is discharged).
          Otherwise, we may shoot ourselves in the foot by overshadowing a free variable in a later constraint.*)
-      (* varset := VS.union !varset (free_vars form VS.empty); *)
-      (* let lst, new_vl = (deconjunctivizer_rhs form !varset) *)
-      (* in *)
       constraint_logger := List.cons form !constraint_logger;
-      (* varset := new_vl; *)
       lazy
         (match !has_solutions with
         | None -> (
@@ -948,7 +940,6 @@ let no_hole_vector_state_implicator_vampire () =
     if not (List.mem form (List.map (fun a -> a.form) !file_logger)) then (
       let filename_pref =
         Printf.sprintf "Implication%d" !file_counter
-        (* String.map filename_map (form_tostr (form) *)
       in
       (* Set up the file and record in the structure. *)
       let oc = open_out (Printf.sprintf "%s.smt" filename_pref) in
@@ -1003,6 +994,7 @@ module NoHoleSimpleImplicatorZ3 () : ImplicationHandler = struct
   let base_verif = no_hole_simple_implicator_z3 ()
 
   let implies pre post =
+    print_endline "e";
     List.fold_left
       (fun lazy_boolean (form, existed) ->
         lazy (Lazy.force lazy_boolean && Lazy.force (base_verif form existed)))

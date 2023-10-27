@@ -1014,7 +1014,7 @@ let test_rec_nonterm_with_hole =
       pre = Equals (TVar (T "x"), Int 1);
       prog = Stmt (SNTerm s);
       post = Less (Int (-1), TVar (T "x"));
-    } 
+    }
     "Int: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(e_t == 1)] \
      {(e_t == 1)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == \
      x_2))} [S MGF=((0 < x) || (0 == x))] {((0 < x) || (0 == x))}] |- {(1 == \
