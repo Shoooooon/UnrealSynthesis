@@ -802,6 +802,7 @@ let no_hole_simple_implicator_z3 () =
 let implicator_hole_synth_cvc5 () =
   (* Create persistent context to track synthesis constraints. *)
   let constraint_logger = ref []
+  (* and varset = ref VS.empty *)
   and (synth_mapper : ((string * variable list) * formula) list option ref) =
     ref None
   and file_counter = ref 0
