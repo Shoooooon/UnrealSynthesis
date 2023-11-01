@@ -32,12 +32,15 @@ let check_proof_with_hole_simple trip expected_pf =
     print_endline pf_str;
     print_endline "")
 
+let eq_int_term (t1, t2) = Logic.Formula.Equals (ITerm t1, ITerm t2)
+let less_int_term (t1, t2) = Logic.Formula.Less (ITerm t1, ITerm t2)
+
 let test_axiom =
   check_proof_no_hole_simple
     { pre = False; prog = Numeric (Int 1); post = False }
     "Int: -> {F} 1 {F}\nWeaken: {F} 1 {F} -> {F} 1 {F}";
   check_proof_no_hole_simple
-    { pre = True; prog = Numeric (Int 0); post = Equals (Int 0, TVar ET) }
+    { pre = True; prog = Numeric (Int 0); post = eq_int_term (Int 0, ITVar ET) }
     "Int: -> {(0 == 0)} 0 {(0 == e_t)}\n\
      Weaken: {(0 == 0)} 0 {(0 == e_t)} -> {T} 0 {(0 == e_t)}";
   check_proof_no_hole_simple
@@ -60,7 +63,7 @@ let test_binary =
     {
       pre = Not True;
       prog = Numeric (Plus (Int 1, Int 1));
-      post = Equals (TVar ET, Int 2);
+      post = eq_int_term (ITVar ET, Int 2);
     }
     "Int: -> {((1 + 1) == 2)} 1 {((e_t + 1) == 2)}\n\
      Int: -> {((fresh1 + 1) == 2)} 1 {((fresh1 + e_t) == 2)}\n\
@@ -104,7 +107,7 @@ let test_binary =
   (* Equals *)
   check_proof_no_hole_simple
     {
-      pre = Equals (Int 0, TVar (T "x"));
+      pre = eq_int_term (Int 0, ITVar (T "x"));
       prog = Boolean (Equals (Int 0, Var "x"));
       post = BVar BT;
     }
@@ -116,7 +119,7 @@ let test_binary =
   (* Less *)
   check_proof_no_hole_simple
     {
-      pre = Not (Less (Int 0, TVar (T "x")));
+      pre = Not (less_int_term (Int 0, ITVar (T "x")));
       prog = Boolean (Less (Int 0, Var "x"));
       post = Not (BVar BT);
     }
@@ -132,7 +135,7 @@ let test_ITE =
     {
       pre = False;
       prog = Numeric (ITE (Equals (Var "x", Int 0), Int 1, Var "x"));
-      post = Equals (TVar ET, TVar (T "x"));
+      post = eq_int_term (ITVar ET, ITVar (T "x"));
     }
     "Var: -> {(((x == 0) => (1 == x)) && (!(x == 0) => (x == x)))} x {(((e_t \
      == 0) => (1 == x)) && (!(e_t == 0) => (x == x)))}\n\
@@ -161,7 +164,7 @@ let test_ITE =
         Stmt
           (ITE
              (Equals (Int 1, Var "x"), Assign ("x", Int 0), Assign ("x", Int 1)));
-      post = Equals (TVar (T "x"), Int 1);
+      post = eq_int_term (ITVar (T "x"), Int 1);
     }
     "Int: -> {(((1 == x) => (0 == 1)) && (!(1 == x) => (1 == 1)))} 1 {(((e_t \
      == x) => (0 == 1)) && (!(e_t == x) => (1 == 1)))}\n\
@@ -191,7 +194,7 @@ let test_stmt =
     {
       pre = False;
       prog = Stmt (Assign ("x", Plus (Int 1, Int 1)));
-      post = Equals (TVar (T "x"), Int 2);
+      post = eq_int_term (ITVar (T "x"), Int 2);
     }
     "Int: -> {((1 + 1) == 2)} 1 {((e_t + 1) == 2)}\n\
      Int: -> {((fresh1 + 1) == 2)} 1 {((fresh1 + e_t) == 2)}\n\
@@ -206,7 +209,7 @@ let test_stmt =
     {
       pre = True;
       prog = Stmt (Seq (Assign ("x", Plus (Int 1, Int 1)), Assign ("x", Int 1)));
-      post = Equals (TVar (T "x"), Int 1);
+      post = eq_int_term (ITVar (T "x"), Int 1);
     }
     "Int: -> {(1 == 1)} 1 {(1 == 1)}\n\
      Int: -> {(1 == 1)} 1 {(1 == 1)}\n\
@@ -227,7 +230,7 @@ let test_while =
     {
       pre = True;
       prog = Stmt (While (False, True, Assign ("x", Int 1)));
-      post = Equals (TVar (T "x"), Int 1);
+      post = eq_int_term (ITVar (T "x"), Int 1);
     }
     "False: -> {(T => ((!F => (x == 1)) && (F => T)))} F {(T => ((!b_t => (x \
      == 1)) && (b_t => T)))}\n\
@@ -242,14 +245,14 @@ let test_while =
      (Inv=T) (x := 1)) {(x == 1)}";
   check_proof_no_hole_simple
     {
-      pre = Less (TVar (T "x"), Int 4);
+      pre = less_int_term (ITVar (T "x"), Int 4);
       prog =
         Stmt
           (While
              ( Less (Var "x", Plus (Int 1, Plus (Int 1, Int 1))),
                True,
                Assign ("x", Plus (Var "x", Plus (Int 1, Int 1))) ));
-      post = Equals (TVar (T "x"), Int 3);
+      post = eq_int_term (ITVar (T "x"), Int 3);
     }
     "Var: -> {(T => ((!(x < (1 + (1 + 1))) => (x == 3)) && ((x < (1 + (1 + \
      1))) => T)))} x {(T => ((!(e_t < (1 + (1 + 1))) => (x == 3)) && ((e_t < \
@@ -309,22 +312,22 @@ let test_while =
     {
       pre =
         And
-          ( Less (TVar (T "x"), Int 5),
+          ( less_int_term (ITVar (T "x"), Int 5),
             Exists
-              ( TermVar (T "k"),
-                Equals (TVar (T "x"), Plus (TVar (T "k"), TVar (T "k"))) ) );
+              ( IntTermVar (T "k"),
+                eq_int_term (ITVar (T "x"), Plus (ITVar (T "k"), ITVar (T "k"))) ) );
       prog =
         Stmt
           (While
              ( Less (Var "x", Plus (Int 1, Plus (Int 1, Int 1))),
                And
-                 ( Less (TVar (T "x"), Int 5),
+                 ( less_int_term (ITVar (T "x"), Int 5),
                    Exists
-                     ( TermVar (T "k"),
-                       Equals (TVar (T "x"), Plus (TVar (T "k"), TVar (T "k")))
+                     ( IntTermVar (T "k"),
+                       eq_int_term (ITVar (T "x"), Plus (ITVar (T "k"), ITVar (T "k")))
                      ) ),
                Assign ("x", Plus (Var "x", Plus (Int 1, Int 1))) ));
-      post = Equals (TVar (T "x"), Int 4);
+      post = eq_int_term (ITVar (T "x"), Int 4);
     }
     "Var: -> {(((x < 5) && ((Exists k). (x == (k + k)))) => ((!(x < (1 + (1 + \
      1))) => (x == 4)) && ((x < (1 + (1 + 1))) => (((x + (1 + 1)) < 5) && \
@@ -464,7 +467,7 @@ let test_nonrec_nonterm =
                expansions = lazy [ Int 1; Plus (Int 1, Int 0) ];
                strongest = lazy None;
              });
-      post = Less (TVar ET, Int 2);
+      post = less_int_term (ITVar ET, Int 2);
     }
     "Int: -> {(1 < 2)} 1 {(e_t < 2)}\n\
      Int: -> {((1 + 0) < 2)} 1 {((e_t + 0) < 2)}\n\
@@ -516,7 +519,7 @@ let test_nonrec_nonterm =
                    ];
                strongest = lazy None;
              });
-      post = Equals (TVar (T "x"), Int 1);
+      post = eq_int_term (ITVar (T "x"), Int 1);
     }
     "Int: -> {(1 == 1)} 1 {(e_t == 1)}\n\
      Assign: {(1 == 1)} 1 {(e_t == 1)} -> {(1 == 1)} (x := 1) {(x == 1)}\n\
@@ -540,14 +543,14 @@ let test_rec_nonterm_no_hole =
         lazy
           (Some
              ( [
-                 (TermVar ET, TermVar (T "e_t_2"));
+                 (IntTermVar ET, IntTermVar (T "e_t_2"));
                  (BoolVar BT, BoolVar (B "b_t_2"));
                ],
-               Less (Int 0, TVar ET) ));
+               less_int_term (Int 0, ITVar ET) ));
     }
   in
   check_proof_no_hole_simple
-    { pre = True; prog = Numeric (NNTerm n); post = Less (Int 0, TVar ET) }
+    { pre = True; prog = Numeric (NNTerm n); post = less_int_term (Int 0, ITVar ET) }
     "Int: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(0 < e_t)] \
      {(0 < e_t)}] |- {(0 < 1)} 1 {(0 < e_t)}\n\
      Int: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(0 < e_t)] \
@@ -594,15 +597,15 @@ let test_rec_nonterm_no_hole =
         lazy
           (Some
              ( [
-                 (TermVar ET, TermVar (T "e_t_2"));
+                 (IntTermVar ET, IntTermVar (T "e_t_2"));
                  (BoolVar BT, BoolVar (B "b_t_2"));
                ],
-               Implies (Equals (TVar (T "x"), Int 1), BVar BT) ));
+               Implies (eq_int_term (ITVar (T "x"), Int 1), BVar BT) ));
     }
   in
   check_proof_no_hole_simple
     {
-      pre = Equals (TVar (T "x"), Int 1);
+      pre = eq_int_term (ITVar (T "x"), Int 1);
       prog = Boolean (BNTerm b);
       post = BVar BT;
     }
@@ -681,10 +684,10 @@ let test_rec_nonterm_no_hole =
         lazy
           (Some
              ( [
-                 (TermVar ET, TermVar (T "e_t_2"));
+                 (IntTermVar ET, IntTermVar (T "e_t_2"));
                  (BoolVar BT, BoolVar (B "b_t_2"));
                ],
-               Equals (Int 1, TVar ET) ));
+               eq_int_term (Int 1, ITVar ET) ));
     }
   and s =
     {
@@ -699,18 +702,18 @@ let test_rec_nonterm_no_hole =
         lazy
           (Some
              ( [
-                 (TermVar ET, TermVar (T "e_t_2"));
+                 (IntTermVar ET, IntTermVar (T "e_t_2"));
                  (BoolVar BT, BoolVar (B "b_t_2"));
-                 (TermVar (T "x"), TermVar (T "x_2"));
+                 (IntTermVar (T "x"), IntTermVar (T "x_2"));
                ],
-               Less (Int 0, TVar (T "x")) ));
+               less_int_term (Int 0, ITVar (T "x")) ));
     }
   in
   check_proof_no_hole_simple
     {
-      pre = Equals (TVar (T "x"), Int 1);
+      pre = eq_int_term (ITVar (T "x"), Int 1);
       prog = Stmt (SNTerm s);
-      post = Less (Int (-1), TVar (T "x"));
+      post = less_int_term (Int (-1), ITVar (T "x"));
     }
     "Int: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(1 == e_t)] \
      {(1 == e_t)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == \
@@ -894,15 +897,15 @@ let test_rec_nonterm_with_hole =
         lazy
           (Some
              ( [
-                 (TermVar ET, TermVar (T "e_t_2"));
+                 (IntTermVar ET, IntTermVar (T "e_t_2"));
                  (BoolVar BT, BoolVar (B "b_t_2"));
                ],
-               BHole ("hole", [ Boolean (BVar BT); Term (TVar (T "x")) ]) ));
+               BHole ("hole", [ Boolean (BVar BT); Term (ITerm (ITVar (T "x"))) ]) ));
     }
   in
   check_proof_with_hole_simple
     {
-      pre = Equals (TVar (T "x"), Int 1);
+      pre = eq_int_term (ITVar (T "x"), Int 1);
       prog = Boolean (BNTerm b);
       post = BVar BT;
     }
@@ -984,10 +987,10 @@ let test_rec_nonterm_with_hole =
         lazy
           (Some
              ( [
-                 (TermVar ET, TermVar (T "e_t_2"));
+                 (IntTermVar ET, IntTermVar (T "e_t_2"));
                  (BoolVar BT, BoolVar (B "b_t_2"));
                ],
-               BHole ("n_hole", [ Term (TVar ET) ]) ));
+               BHole ("n_hole", [ Term (ITerm (ITVar ET)) ]) ));
     }
   and s =
     {
@@ -1002,18 +1005,18 @@ let test_rec_nonterm_with_hole =
         lazy
           (Some
              ( [
-                 (TermVar ET, TermVar (T "e_t_2"));
+                 (IntTermVar ET, IntTermVar (T "e_t_2"));
                  (BoolVar BT, BoolVar (B "b_t_2"));
-                 (TermVar (T "x"), TermVar (T "x_2"));
+                 (IntTermVar (T "x"), IntTermVar (T "x_2"));
                ],
-               BHole ("s_hole", [ Term (TVar (T "x")) ]) ));
+               BHole ("s_hole", [ Term (ITerm (ITVar (T "x"))) ]) ));
     }
   in
   check_proof_with_hole_simple
     {
-      pre = Equals (TVar (T "x"), Int 1);
+      pre = eq_int_term (ITVar (T "x"), Int 1);
       prog = Stmt (SNTerm s);
-      post = Less (Int (-1), TVar (T "x"));
+      post = less_int_term (Int (-1), ITVar (T "x"));
     }
     "Int: -> [{((T && (e_t == e_t_2)) && (b_t <-> b_t_2))} [N MGF=(e_t == 1)] \
      {(e_t == 1)}, {(((T && (e_t == e_t_2)) && (b_t <-> b_t_2)) && (x == \
@@ -1465,7 +1468,7 @@ let test_axiom_vector_states =
     {
       pre = True;
       prog = Numeric (Int 0);
-      post = Equals (Int 0, ATVar (TApp (ET, Int 1)));
+      post = eq_int_term (Int 0, AITVar (ITApp (ET, Int 1)));
     }
     "Int: -> {(0 == 0)} 0 {(0 == e_t[1])}\n\
      Weaken: {(0 == 0)} 0 {(0 == e_t[1])} -> {T} 0 {(0 == e_t[1])}";
@@ -1473,7 +1476,7 @@ let test_axiom_vector_states =
     {
       pre = False;
       prog = Boolean False;
-      post = Forall (TermVar (T "i"), ABVar (BApp (BT, TVar (T "i"))));
+      post = Forall (IntTermVar (T "i"), ABVar (BApp (BT, ITVar (T "i"))));
     }
     "False: -> {((Forall i). F)} F {((Forall i). b_t[i])}\n\
      Weaken: {((Forall i). F)} F {((Forall i). b_t[i])} -> {F} F {((Forall i). \
@@ -1482,7 +1485,7 @@ let test_axiom_vector_states =
     {
       pre = True;
       prog = Boolean True;
-      post = Exists (TermVar (T "i"), ABVar (BApp (BT, TVar (T "i"))));
+      post = Exists (IntTermVar (T "i"), ABVar (BApp (BT, ITVar (T "i"))));
     }
     "True: -> {((Exists i). T)} T {((Exists i). b_t[i])}\n\
      Weaken: {((Exists i). T)} T {((Exists i). b_t[i])} -> {T} T {((Exists i). \
@@ -1493,7 +1496,7 @@ let test_not_vector_states =
     {
       pre = True;
       prog = Boolean (Not False);
-      post = Exists (TermVar (T "i"), ABVar (BApp (BT, TVar (T "i"))));
+      post = Exists (IntTermVar (T "i"), ABVar (BApp (BT, ITVar (T "i"))));
     }
     "False: -> {((Exists i). !F)} F {((Exists i). !b_t[i])}\n\
      Not: {((Exists i). !F)} F {((Exists i). !b_t[i])} -> {((Exists i). !F)} \
@@ -1508,7 +1511,7 @@ let test_binary_vector_states =
       pre = Not True;
       prog = Numeric (Plus (Int 1, Int 1));
       post =
-        Exists (TermVar (T "i"), Equals (ATVar (TApp (ET, TVar (T "i"))), Int 2));
+        Exists (IntTermVar (T "i"), eq_int_term (AITVar (ITApp (ET, ITVar (T "i"))), Int 2));
     }
     "Int: -> {((Exists i). ((1 + 1) == 2))} 1 {((Exists i). ((e_t[i] + 1) == \
      2))}\n\
@@ -1546,12 +1549,12 @@ let test_binary_vector_states =
       prog = Boolean (And (True, Or (True, False)));
       post =
         Exists
-          ( TermVar (T "i"),
+          ( IntTermVar (T "i"),
             Exists
-              ( TermVar (T "j"),
+              ( IntTermVar (T "j"),
                 Iff
-                  ( ABVar (BApp (BT, TVar (T "j"))),
-                    ABVar (BApp (BT, TVar (T "i"))) ) ) );
+                  ( ABVar (BApp (BT, ITVar (T "j"))),
+                    ABVar (BApp (BT, ITVar (T "i"))) ) ) );
     }
     "True: -> {((Exists i). ((Exists j). ((T && (T || F)) <-> (T && (T || \
      F)))))} T {((Exists i). ((Exists j). ((b_t[j] && (T || F)) <-> (b_t[i] && \
@@ -1585,7 +1588,7 @@ let test_binary_vector_states =
   (* Equals *)
   check_proof_no_hole_vector_state
     {
-      pre = Equals (Int 0, ATVar (TApp (T "x", Int 4)));
+      pre = eq_int_term (Int 0, AITVar (ITApp (T "x", Int 4)));
       prog = Boolean (Equals (Int 0, Var "x"));
       post = And (ABVar (BApp (BT, Int 0)), ABVar (BApp (BT, Int 12)));
     }
@@ -1604,8 +1607,8 @@ let test_binary_vector_states =
     {
       pre =
         Forall
-          ( TermVar (T "j"),
-            Not (Less (Int 0, ATVar (TApp (T "x", TVar (T "j"))))) );
+          ( IntTermVar (T "j"),
+            Not (less_int_term (Int 0, AITVar (ITApp (T "x", ITVar (T "j"))))) );
       prog = Boolean (Less (Int 0, Var "x"));
       post = Or (ABVar (BApp (BT, Int 0)), Not (ABVar (BApp (BT, Int 12))));
     }
@@ -1633,7 +1636,7 @@ let test_nonrec_nonterm_vector_state =
                expansions = lazy [ Int 1; Plus (Int 1, Int 0) ];
                strongest = lazy None;
              });
-      post = Less (ATVar (TApp (ET, Int 4)), Int 2);
+      post = less_int_term (AITVar (ITApp (ET, Int 4)), Int 2);
     }
     "Int: -> {(1 < 2)} 1 {(e_t[4] < 2)}\n\
      Int: -> {((1 + 0) < 2)} 1 {((e_t[4] + 0) < 2)}\n\
@@ -1687,7 +1690,7 @@ let test_nonrec_nonterm_vector_state =
              });
       post =
         Exists
-          (TermVar (T "i"), Equals (ATVar (TApp (T "x", TVar (T "i"))), Int 1));
+          (IntTermVar (T "i"), eq_int_term (AITVar (ITApp (T "x", ITVar (T "i"))), Int 1));
     }
     "Int: -> {((Exists i). (1 == 1))} 1 {((Exists i). (e_t[i] == 1))}\n\
      Assign: {((Exists i). (1 == 1))} 1 {((Exists i). (e_t[i] == 1))} -> \
@@ -1718,17 +1721,17 @@ let test_rec_nonterm_no_hole_vector_state =
         lazy
           (Some
              ( [
-                 (ATermVar ET, ATermVar (T "e_t_2"));
+                 (AIntTermVar ET, AIntTermVar (T "e_t_2"));
                  (ABoolVar BT, ABoolVar (B "b_t_2"));
                ],
-               Less (Int 0, ATVar (TApp (ET, Int 0))) ));
+               less_int_term (Int 0, AITVar (ITApp (ET, Int 0))) ));
     }
   in
   check_proof_no_hole_vector_state
     {
       pre = True;
       prog = Numeric (NNTerm n);
-      post = Less (Int 0, ATVar (TApp (ET, Int 0)));
+      post = less_int_term (Int 0, AITVar (ITApp (ET, Int 0)));
     }
     "Int: -> [{((T && ((Forall i). (e_t[i] == e_t_2[i]))) && ((Forall i). \
      (b_t[i] <-> b_t_2[i])))} [N MGF=(0 < e_t[0])] {(0 < e_t[0])}] |- {(0 < \
@@ -1790,23 +1793,23 @@ let test_rec_nonterm_no_hole_vector_state =
         lazy
           (Some
              ( [
-                 (ATermVar ET, ATermVar (T "e_t_2"));
+                 (AIntTermVar ET, AIntTermVar (T "e_t_2"));
                  (ABoolVar BT, ABoolVar (B "b_t_2"));
                ],
                Forall
-                 ( TermVar (T "i"),
+                 ( IntTermVar (T "i"),
                    Implies
-                     ( Equals (ATVar (TApp (T "x", TVar (T "i"))), Int 1),
-                       ABVar (BApp (BT, TVar (T "i"))) ) ) ));
+                     ( eq_int_term (AITVar (ITApp (T "x", ITVar (T "i"))), Int 1),
+                       ABVar (BApp (BT, ITVar (T "i"))) ) ) ));
     }
   in
   check_proof_no_hole_vector_state
     {
       pre =
         Forall
-          (TermVar (T "i"), Equals (ATVar (TApp (T "x", TVar (T "i"))), Int 1));
+          (IntTermVar (T "i"), eq_int_term (AITVar (ITApp (T "x", ITVar (T "i"))), Int 1));
       prog = Boolean (BNTerm b);
-      post = Forall (TermVar (T "i"), ABVar (BApp (BT, TVar (T "i"))));
+      post = Forall (IntTermVar (T "i"), ABVar (BApp (BT, ITVar (T "i"))));
     }
     "Var: -> [{((T && ((Forall i). (e_t[i] == e_t_2[i]))) && ((Forall i). \
      (b_t[i] <-> b_t_2[i])))} [B MGF=((Forall i). ((x[i] == 1) => b_t[i]))] \
@@ -1925,12 +1928,12 @@ let test_rec_nonterm_no_hole_vector_state =
         lazy
           (Some
              ( [
-                 (ATermVar ET, ATermVar (T "e_t_2"));
+                 (AIntTermVar ET, AIntTermVar (T "e_t_2"));
                  (ABoolVar BT, ABoolVar (B "b_t_2"));
                ],
                Forall
-                 ( TermVar (T "i"),
-                   Equals (Int 1, ATVar (TApp (ET, TVar (T "i")))) ) ));
+                 ( IntTermVar (T "i"),
+                   eq_int_term (Int 1, AITVar (ITApp (ET, ITVar (T "i")))) ) ));
     }
   and s =
     {
@@ -1945,20 +1948,20 @@ let test_rec_nonterm_no_hole_vector_state =
         lazy
           (Some
              ( [
-                 (ATermVar ET, ATermVar (T "e_t_2"));
+                 (AIntTermVar ET, AIntTermVar (T "e_t_2"));
                  (ABoolVar BT, ABoolVar (B "b_t_2"));
-                 (ATermVar (T "x"), ATermVar (T "x_2"));
+                 (AIntTermVar (T "x"), AIntTermVar (T "x_2"));
                ],
                Forall
-                 ( TermVar (T "i"),
-                   Less (Int 0, ATVar (TApp (T "x", TVar (T "i")))) ) ));
+                 ( IntTermVar (T "i"),
+                   less_int_term (Int 0, AITVar (ITApp (T "x", ITVar (T "i")))) ) ));
     }
   in
   check_proof_no_hole_vector_state
     {
-      pre = Equals (ATVar (TApp (T "x", Int 1)), Int 1);
+      pre = eq_int_term (AITVar (ITApp (T "x", Int 1)), Int 1);
       prog = Stmt (SNTerm s);
-      post = Less (Int (-1), ATVar (TApp (T "x", Int 1)));
+      post = less_int_term (Int (-1), AITVar (ITApp (T "x", Int 1)));
     }
     "Int: -> [{((T && ((Forall i). (e_t[i] == e_t_2[i]))) && ((Forall i). \
      (b_t[i] <-> b_t_2[i])))} [N MGF=((Forall i). (1 == e_t[i]))] {((Forall \
@@ -2283,15 +2286,15 @@ let test_ITE_vector_states =
     {
       pre =
         Forall
-          ( TermVar (T "i"),
-            Equals (TVar (T "i"), ATVar (TApp (T "x", TVar (T "i")))) );
+          ( IntTermVar (T "i"),
+            eq_int_term (ITVar (T "i"), AITVar (ITApp (T "x", ITVar (T "i")))) );
       prog = Numeric (ITE (Equals (Var "x", Int 0), Int 1, Var "x"));
       post =
         Forall
-          ( TermVar (T "i"),
+          ( IntTermVar (T "i"),
             Implies
-              ( Less (Int 1, TVar (T "i")),
-                Less (Int 1, ATVar (TApp (ET, TVar (T "i")))) ) );
+              ( less_int_term (Int 1, ITVar (T "i")),
+                less_int_term (Int 1, AITVar (ITApp (ET, ITVar (T "i")))) ) );
     }
     "Var: -> {((Forall i). ((F || (T && (1 < i))) => ((F || ((!(x[i] == 0) && \
      T) && (1 < x[i]))) || (((x[i] == 0) && T) && (1 < 1)))))} x {((Forall i). \
@@ -2348,14 +2351,14 @@ let test_ITE_vector_states =
         lazy
           (Some
              ( [
-                 (ATermVar ET, ATermVar (T "e_t_2"));
+                 (AIntTermVar ET, AIntTermVar (T "e_t_2"));
                  (ABoolVar BT, ABoolVar (B "b_t_2"));
                ],
                Exists
-                 ( TermVar (T "n"),
+                 ( IntTermVar (T "n"),
                    Forall
-                     ( TermVar (T "i"),
-                       Equals (TVar (T "n"), ATVar (TApp (ET, TVar (T "i")))) )
+                     ( IntTermVar (T "i"),
+                       eq_int_term (ITVar (T "n"), AITVar (ITApp (ET, ITVar (T "i")))) )
                  ) ));
     }
   in
@@ -2363,15 +2366,15 @@ let test_ITE_vector_states =
     {
       pre =
         Forall
-          ( TermVar (T "i"),
-            Equals (TVar (T "i"), ATVar (TApp (T "x", TVar (T "i")))) );
+          ( IntTermVar (T "i"),
+            eq_int_term (ITVar (T "i"), AITVar (ITApp (T "x", ITVar (T "i")))) );
       prog = Numeric (ITE (Equals (Var "x", NNTerm n), Int 1, Var "x"));
       post =
         Forall
-          ( TermVar (T "n"),
+          ( IntTermVar (T "n"),
             Exists
-              ( TermVar (T "i"),
-                Less (TVar (T "n"), ATVar (TApp (ET, TVar (T "i")))) ) );
+              ( IntTermVar (T "i"),
+                less_int_term (ITVar (T "n"), AITVar (ITApp (ET, ITVar (T "i")))) ) );
     }
     "Var: -> {((Forall fresh2). (((Exists n). ((Forall i). (n == fresh2[i]))) \
      => ((Forall n). ((Exists i). ((F || ((!(x[i] == fresh2[i]) && T) && (n < \
@@ -2510,24 +2513,24 @@ let test_ITE_vector_states =
     {
       pre =
         Exists
-          ( TermVar (T "i"),
+          ( IntTermVar (T "i"),
             Exists
-              ( TermVar (T "j"),
+              ( IntTermVar (T "j"),
                 And
-                  ( Equals (Int 0, ATVar (TApp (T "x", TVar (T "i")))),
-                    Equals (Int 1, ATVar (TApp (T "x", TVar (T "j")))) ) ) );
+                  ( eq_int_term (Int 0, AITVar (ITApp (T "x", ITVar (T "i")))),
+                    eq_int_term (Int 1, AITVar (ITApp (T "x", ITVar (T "j")))) ) ) );
       prog =
         Stmt
           (ITE
              (Equals (Int 1, Var "x"), Assign ("x", Int 0), Assign ("x", Int 1)));
       post =
         Exists
-          ( TermVar (T "i"),
+          ( IntTermVar (T "i"),
             Exists
-              ( TermVar (T "j"),
+              ( IntTermVar (T "j"),
                 And
-                  ( Equals (Int 0, ATVar (TApp (T "x", TVar (T "i")))),
-                    Equals (Int 1, ATVar (TApp (T "x", TVar (T "j")))) ) ) );
+                  ( eq_int_term (Int 0, AITVar (ITApp (T "x", ITVar (T "i")))),
+                    eq_int_term (Int 1, AITVar (ITApp (T "x", ITVar (T "j")))) ) ) );
     }
     "Int: -> {((Exists i). ((Exists j). (((F || ((!(1 == x[i]) && T) && (0 == \
      1))) || (((1 == x[i]) && T) && (0 == 0))) && ((F || ((!(1 == x[j]) && T) \
@@ -2632,14 +2635,14 @@ let test_ITE_vector_states =
         lazy
           (Some
              ( [
-                 (ATermVar ET, ATermVar (T "e_t_2"));
+                 (AIntTermVar ET, AIntTermVar (T "e_t_2"));
                  (ABoolVar BT, ABoolVar (B "b_t_2"));
                ],
                Exists
-                 ( TermVar (T "n"),
+                 ( IntTermVar (T "n"),
                    Forall
-                     ( TermVar (T "i"),
-                       Equals (TVar (T "n"), ATVar (TApp (ET, TVar (T "i")))) )
+                     ( IntTermVar (T "i"),
+                       eq_int_term (ITVar (T "n"), AITVar (ITApp (ET, ITVar (T "i")))) )
                  ) ));
     }
   in
@@ -2656,23 +2659,23 @@ let test_ITE_vector_states =
         lazy
           (Some
              ( [
-                 (ATermVar ET, ATermVar (T "e_t_2"));
+                 (AIntTermVar ET, AIntTermVar (T "e_t_2"));
                  (ABoolVar BT, ABoolVar (B "b_t_2"));
-                 (ATermVar (T "x"), ATermVar (T "x_2"));
+                 (AIntTermVar (T "x"), AIntTermVar (T "x_2"));
                ],
                Exists
-                 ( TermVar (T "n"),
+                 ( IntTermVar (T "n"),
                    Exists
-                     ( TermVar (T "m"),
+                     ( IntTermVar (T "m"),
                        Forall
-                         ( TermVar (T "i"),
+                         ( IntTermVar (T "i"),
                            Implies
-                             ( Less
-                                 ( TVar (T "n"),
-                                   ATVar (TApp (T "y", TVar (T "i"))) ),
-                               Equals
-                                 ( TVar (T "m"),
-                                   ATVar (TApp (T "x", TVar (T "i"))) ) ) ) ) )
+                             ( less_int_term
+                                 ( ITVar (T "n"),
+                                   AITVar (ITApp (T "y", ITVar (T "i"))) ),
+                               eq_int_term
+                                 ( ITVar (T "m"),
+                                   AITVar (ITApp (T "x", ITVar (T "i"))) ) ) ) ) )
              ));
     }
   in
@@ -2680,18 +2683,18 @@ let test_ITE_vector_states =
     {
       pre =
         Forall
-          ( TermVar (T "i"),
+          ( IntTermVar (T "i"),
             And
-              ( Equals (TVar (T "i"), ATVar (TApp (T "y", TVar (T "i")))),
-                Equals (Int (-1), ATVar (TApp (T "x", TVar (T "i")))) ) );
+              ( eq_int_term (ITVar (T "i"), AITVar (ITApp (T "y", ITVar (T "i")))),
+                eq_int_term (Int (-1), AITVar (ITApp (T "x", ITVar (T "i")))) ) );
       prog = Stmt (SNTerm s);
       post =
         Exists
-          ( TermVar (T "i"),
+          ( IntTermVar (T "i"),
             Not
-              (Equals
-                 ( ATVar (TApp (T "y", TVar (T "i"))),
-                   ATVar (TApp (T "x", TVar (T "i"))) )) );
+              (eq_int_term
+                 ( AITVar (ITApp (T "y", ITVar (T "i"))),
+                   AITVar (ITApp (T "x", ITVar (T "i"))) )) );
     }
     "Var: -> [{(((T && ((Forall i). (e_t[i] == e_t_2[i]))) && ((Forall i). \
      (b_t[i] <-> b_t_2[i]))) && ((Forall i). (x[i] == x_2[i])))} [S \
@@ -3236,9 +3239,9 @@ let test_stmt_vector_states =
       prog = Stmt (Assign ("x", Plus (Int 1, Var "x")));
       post =
         Forall
-          ( TermVar (T "i"),
-            Equals
-              (ATVar (TApp (T "x", TVar (T "i"))), Plus (Int 2, TVar (T "i")))
+          ( IntTermVar (T "i"),
+            eq_int_term
+              (AITVar (ITApp (T "x", ITVar (T "i"))), Plus (Int 2, ITVar (T "i")))
           );
     }
     "Int: -> {((Forall i). ((1 + x[i]) == (2 + i)))} 1 {((Forall i). ((e_t[i] \
@@ -3262,7 +3265,7 @@ let test_stmt_vector_states =
       prog = Stmt (Seq (Assign ("x", Plus (Int 1, Int 1)), Assign ("x", Int 1)));
       post =
         Forall
-          (TermVar (T "i"), Equals (ATVar (TApp (T "x", TVar (T "i"))), Int 1));
+          (IntTermVar (T "i"), eq_int_term (AITVar (ITApp (T "x", ITVar (T "i"))), Int 1));
     }
     "Int: -> {((Forall i). (1 == 1))} 1 {((Forall i). (1 == 1))}\n\
      Int: -> {((Forall i). (1 == 1))} 1 {((Forall i). (1 == 1))}\n\

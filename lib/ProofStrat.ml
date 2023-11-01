@@ -86,8 +86,8 @@ let nonterm_handler_template expansion_to_prog nterm_to_prog
         List.fold_left
           (fun form (prog_var, ghost_var) ->
             match (prog_var, ghost_var) with
-            | TermVar p, TermVar g ->
-                Logic.Formula.And (form, Equals (TVar p, TVar g))
+            | IntTermVar p, IntTermVar g ->
+                Logic.Formula.And (form, Equals (ITerm (ITVar p), ITerm (ITVar g)))
             | BoolVar p, BoolVar g ->
                 Logic.Formula.And (form, Iff (BVar p, BVar g))
             | ABoolVar p, ABoolVar g ->
@@ -105,11 +105,11 @@ let nonterm_handler_template expansion_to_prog nterm_to_prog
                         (List.init finite_vectors (fun x -> x + 1))
                     else
                       Forall
-                        ( TermVar (T "i"),
+                        ( IntTermVar (T "i"),
                           Iff
-                            ( ABVar (BApp (p, TVar (T "i"))),
-                              ABVar (BApp (g, TVar (T "i"))) ) ) )
-            | ATermVar p, ATermVar g ->
+                            ( ABVar (BApp (p, ITVar (T "i"))),
+                              ABVar (BApp (g, ITVar (T "i"))) ) ) )
+            | AIntTermVar p, AIntTermVar g ->
                 Logic.Formula.And
                   ( form,
                     if finite_vectors != 0 then
@@ -118,16 +118,16 @@ let nonterm_handler_template expansion_to_prog nterm_to_prog
                           Logic.Formula.And
                             ( form,
                               Equals
-                                ( ATVar (TApp (p, Int index)),
-                                  ATVar (TApp (g, Int index)) ) ))
+                                ( ITerm (AITVar (ITApp (p, Int index))),
+                                  ITerm (AITVar (ITApp (g, Int index))) ) ))
                         True
                         (List.init finite_vectors (fun x -> x + 1))
                     else
                       Forall
-                        ( TermVar (T "i"),
+                        ( IntTermVar (T "i"),
                           Equals
-                            ( ATVar (TApp (p, TVar (T "i"))),
-                              ATVar (TApp (g, TVar (T "i"))) ) ) )
+                            ( ITerm (AITVar (ITApp (p, ITVar (T "i")))),
+                              ITerm (AITVar (ITApp (g, ITVar (T "i")))) ) ) )
             | _ -> raise (Bad_Strongest_Triple (prog_tostr trip.prog, "")))
           True var_pairs_list
       in
@@ -141,31 +141,31 @@ let nonterm_handler_template expansion_to_prog nterm_to_prog
           (List.map
              (fun x ->
                match x with
-               | TermVar y ->
+               | IntTermVar y ->
                    if not vector_state then
                      ( x,
-                       TermVar
+                       IntTermVar
                          (T
-                            "unusedconstantvarthatshouldbereplacedbysomtehingrobustwhenpossible")
+                            "unusedconstanITVarthatshouldbereplacedbysomtehingrobustwhenpossible")
                      )
                    else
-                     ( (match y with ET -> ATermVar ET | T v -> ATermVar (T v)),
-                       ATermVar
+                     ( (match y with ET -> AIntTermVar ET | T v -> AIntTermVar (T v)),
+                       AIntTermVar
                          (T
-                            "unusedconstantvarthatshouldbereplacedbysomtehingrobustwhenpossible")
+                            "unusedconstanITVarthatshouldbereplacedbysomtehingrobustwhenpossible")
                      )
                | BoolVar y ->
                    if not vector_state then
                      ( x,
                        BoolVar
                          (B
-                            "unusedconstantvarthatshouldbereplacedbysomtehingrobustwhenpossible")
+                            "unusedconstanITVarthatshouldbereplacedbysomtehingrobustwhenpossible")
                      )
                    else
                      ( (match y with BT -> ABoolVar BT | B v -> ABoolVar (B v)),
                        ABoolVar
                          (B
-                            "unusedconstantvarthatshouldbereplacedbysomtehingrobustwhenpossible")
+                            "unusedconstanITVarthatshouldbereplacedbysomtehingrobustwhenpossible")
                      )
                | _ -> raise Unsupported_Var)
              (List.filter
@@ -184,18 +184,18 @@ let nonterm_handler_template expansion_to_prog nterm_to_prog
                 (List.map (fun (_, y, _) -> var_tostr y) xyz_list)
             in
             match prog_var with
-            | TermVar _ ->
-                ( subs form prog_var (Term (TVar (T y))),
-                  List.cons (prog_var, TermVar (T y), ghost_var) xyz_list )
+            | IntTermVar _ ->
+                ( subs form prog_var (Term (ITerm (ITVar (T y)))),
+                  List.cons (prog_var, IntTermVar (T y), ghost_var) xyz_list )
             | BoolVar _ ->
                 ( subs form prog_var (Boolean (BVar (B y))),
                   List.cons (prog_var, BoolVar (B y), ghost_var) xyz_list )
             | ABoolVar _ ->
                 ( subs form prog_var (Boolean (ABVar (BUnApp (B y)))),
                   List.cons (prog_var, ABoolVar (B y), ghost_var) xyz_list )
-            | ATermVar _ ->
-                ( subs form prog_var (Term (ATVar (TUnApp (T y)))),
-                  List.cons (prog_var, ATermVar (T y), ghost_var) xyz_list ))
+            | AIntTermVar _ ->
+                ( subs form prog_var (Term (ITerm (AITVar (ITUnApp (T y))))),
+                  List.cons (prog_var, AIntTermVar (T y), ghost_var) xyz_list ))
           (postc, []) var_pairs_list
       in
       (* List.iter
@@ -210,9 +210,9 @@ let nonterm_handler_template expansion_to_prog nterm_to_prog
         List.fold_left
           (fun form (x, _, z) ->
             match x with
-            | TermVar x -> subs form z (Term (TVar x))
+            | IntTermVar x -> subs form z (Term (ITerm (ITVar x)))
             | BoolVar x -> subs form z (Boolean (BVar x))
-            | ATermVar x -> subs form z (Term (ATVar (TUnApp x)))
+            | AIntTermVar x -> subs form z (Term (ITerm (AITVar (ITUnApp x))))
             | ABoolVar x -> subs form z (Boolean (ABVar (BUnApp x))))
           adapted_pre_1 xyz_list
       in
@@ -223,9 +223,9 @@ let nonterm_handler_template expansion_to_prog nterm_to_prog
             List.fold_left
               (fun form (x, y, _) ->
                 match y with
-                | TermVar yv -> subs form x (Term (TVar yv))
+                | IntTermVar yv -> subs form x (Term (ITerm (ITVar yv)))
                 | BoolVar yv -> subs form x (Boolean (BVar yv))
-                | ATermVar yv -> subs form x (Term (ATVar (TUnApp yv)))
+                | AIntTermVar yv -> subs form x (Term (ITerm (AITVar (ITUnApp yv))))
                 | ABoolVar yv -> subs form x (Boolean (ABVar (BUnApp yv))))
               trip.post xyz_list )
       in
@@ -322,8 +322,8 @@ let nonterm_handler_simple_stmt =
    VS.map
      (fun var ->
        match var with
-       | TermVar ET -> ATermVar ET
-       | TermVar (T x) -> ATermVar (T x)
+       | IntTermVar ET -> AIntTermVar ET
+       | IntTermVar (T x) -> AIntTermVar (T x)
        | BoolVar BT -> ABoolVar BT
        | BoolVar (B x) -> ABoolVar (B x)
        | _ -> raise Unsupported_Var)
@@ -353,9 +353,9 @@ let nonterm_handler_vector_state_stmt =
    TODO: Should this be a module type? Records feel like a non-idomatic choice. *)
 type trace_variant = {
   et_var : variable;
-  strvar_to_term : string -> term;
+  strvar_to_int_term : string -> int_term;
   strvar_to_var_term : string -> variable;
-  et_term : term;
+  et_int_term : int_term;
   bt_var : variable;
   strvar_to_var_bool : string -> variable;
   bt_form : formula;
@@ -364,10 +364,10 @@ type trace_variant = {
 
 let simple_tv =
   {
-    et_var = TermVar ET;
-    strvar_to_term = (fun x -> TVar (T x));
-    strvar_to_var_term = (fun x -> TermVar (T x));
-    et_term = TVar ET;
+    et_var = IntTermVar ET;
+    strvar_to_int_term = (fun x -> ITVar (T x));
+    strvar_to_var_term = (fun x -> IntTermVar (T x));
+    et_int_term = ITVar ET;
     bt_var = BoolVar BT;
     strvar_to_var_bool = (fun v -> BoolVar (B v));
     bt_form = BVar BT;
@@ -376,10 +376,10 @@ let simple_tv =
 
 let vector_state_tv =
   {
-    et_var = ATermVar ET;
-    strvar_to_term = (fun x -> ATVar (TUnApp (T x)));
-    strvar_to_var_term = (fun x -> ATermVar (T x));
-    et_term = ATVar (TUnApp ET);
+    et_var = AIntTermVar ET;
+    strvar_to_int_term = (fun x -> AITVar (ITUnApp (T x)));
+    strvar_to_var_term = (fun x -> AIntTermVar (T x));
+    et_int_term = AITVar (ITUnApp ET);
     bt_var = ABoolVar BT;
     strvar_to_var_bool = (fun v -> ABoolVar (B v));
     bt_form = ABVar (BUnApp BT);
@@ -394,7 +394,7 @@ let int_template tv i (ctrip : contextualized_triple_no_pre) =
       context = ctrip.context;
       trip =
         {
-          pre = subs trip.post tv.et_var (Term (Int i));
+          pre = subs trip.post tv.et_var (Term (ITerm (Int i)));
           prog = trip.prog;
           post = trip.post;
         };
@@ -411,7 +411,7 @@ let var_template tv x (ctrip : contextualized_triple_no_pre) =
       context = ctrip.context;
       trip =
         {
-          pre = subs trip.post tv.et_var (Term (tv.strvar_to_term x));
+          pre = subs trip.post tv.et_var (Term (ITerm (tv.strvar_to_int_term x)));
           prog = trip.prog;
           post = trip.post;
         };
@@ -598,7 +598,7 @@ let plus_template tv n1 n2 (ctrip : contextualized_triple_no_pre) build_pf
             prog = Numeric n2;
             post =
               subs trip.post tv.et_var
-                (Term (Plus (tv.strvar_to_term fresh, tv.et_term)));
+                (Term (ITerm (Plus (tv.strvar_to_int_term fresh, tv.et_int_term))));
           };
       }
       implies
@@ -613,7 +613,7 @@ let plus_template tv n1 n2 (ctrip : contextualized_triple_no_pre) build_pf
             post =
               subs (get_conclusion right_hyp).trip.pre
                 (tv.strvar_to_var_term fresh)
-                (Term tv.et_term);
+                (Term (ITerm tv.et_int_term));
           };
       }
       implies
@@ -648,7 +648,7 @@ let equals_template tv n1 n2 (ctrip : contextualized_triple_no_pre) build_pf
             prog = Numeric n2;
             post =
               subs trip.post tv.bt_var
-                (Boolean (Equals (tv.strvar_to_term fresh, tv.et_term)));
+                (Boolean (Equals (ITerm (tv.strvar_to_int_term fresh), (ITerm tv.et_int_term))));
           };
       }
       implies
@@ -663,7 +663,7 @@ let equals_template tv n1 n2 (ctrip : contextualized_triple_no_pre) build_pf
             post =
               subs (get_conclusion right_hyp).trip.pre
                 (tv.strvar_to_var_term fresh)
-                (Term tv.et_term);
+                (Term (ITerm tv.et_int_term));
           };
       }
       implies
@@ -698,7 +698,7 @@ let less_template tv n1 n2 (ctrip : contextualized_triple_no_pre) build_pf
             prog = Numeric n2;
             post =
               subs trip.post tv.bt_var
-                (Boolean (Less (tv.strvar_to_term fresh, tv.et_term)));
+                (Boolean (Less (ITerm (tv.strvar_to_int_term fresh), ITerm (tv.et_int_term))));
           };
       }
       implies
@@ -713,7 +713,7 @@ let less_template tv n1 n2 (ctrip : contextualized_triple_no_pre) build_pf
             post =
               subs (get_conclusion right_hyp).trip.pre
                 (tv.strvar_to_var_term fresh)
-                (Term tv.et_term);
+                (Term (ITerm tv.et_int_term));
           };
       }
       implies
@@ -745,7 +745,7 @@ let assign_template tv v n (ctrip : contextualized_triple_no_pre) build_pf
         trip =
           {
             prog = Numeric n;
-            post = subs trip.post (tv.strvar_to_var_term v) (Term tv.et_term);
+            post = subs trip.post (tv.strvar_to_var_term v) (Term (ITerm tv.et_int_term));
           };
       }
       implies
@@ -857,12 +857,12 @@ let ite_vector_state_template prog_setter b a1 a2
   (* Determine x, the variables whose values can be changed by executing the loop.
      These should all be vectors. *)
   (* TODO: Make this neater -- two mutated_vars? *)
-  let mutated_aterm_vars : term_array_var list =
+  let mutated_aint_term_vars : int_term_array_var list =
     List.map
       (fun x ->
         match x with
-        | TermVar ET -> (ET : term_array_var)
-        | TermVar (T x) -> (T x : term_array_var)
+        | IntTermVar ET -> (ET : int_term_array_var)
+        | IntTermVar (T x) -> (T x : int_term_array_var)
         | _ -> raise Unsupported_Var)
       (VS.elements (VS.remove (BoolVar BT) (reassigned_vars trip.prog)))
   in
@@ -872,7 +872,7 @@ let ite_vector_state_template prog_setter b a1 a2
      In principle, we should never introduce a new, unbound variable in the precondition because {|P(new)|}S{|Q|} when Q does not reference new is the same as {|\forall new. P(new)|}S{|Q|}.
      If there are weird overshadowing errors in the future though, this is a place to look.*)
   let x2y_map =
-    mutated_aterm_vars
+    mutated_aint_term_vars
     |> List.fold_left
          (fun xymap x ->
            List.cons
@@ -881,13 +881,13 @@ let ite_vector_state_template prog_setter b a1 a2
                   (fresh_var_name trip.post
                      (List.cons
                         (var_tostr (ABoolVar b_loop))
-                        (List.map (fun (_, y) -> var_tostr (ATermVar y)) xymap)))
-                 : term_array_var) )
+                        (List.map (fun (_, y) -> var_tostr (AIntTermVar y)) xymap)))
+                 : int_term_array_var) )
              xymap)
          []
   in
   let x2z_map =
-    mutated_aterm_vars
+    mutated_aint_term_vars
     |> List.fold_left
          (fun xzmap x ->
            List.cons
@@ -897,9 +897,9 @@ let ite_vector_state_template prog_setter b a1 a2
                      (List.cons
                         (var_tostr (ABoolVar b_loop))
                         (List.map
-                           (fun (_, y) -> var_tostr (ATermVar y))
+                           (fun (_, y) -> var_tostr (AIntTermVar y))
                            (List.append x2y_map xzmap))))
-                 : term_array_var) )
+                 : int_term_array_var) )
              xzmap)
          []
   in
@@ -913,7 +913,7 @@ let ite_vector_state_template prog_setter b a1 a2
             prog = prog_setter a2;
             post =
               t_transform trip.post b_loop
-                (VMap_AT.of_seq (List.to_seq x2y_map));
+                {int_map = (VMap_AIT.of_seq (List.to_seq x2y_map)); bitv_map = VMap_ABitvT.empty};
           };
       }
       implies
@@ -929,10 +929,10 @@ let ite_vector_state_template prog_setter b a1 a2
               subs_several
                 (subs_several (get_conclusion else_hyp).trip.pre
                    (List.map
-                      (fun (x, z) -> (ATermVar x, Term (ATVar (TUnApp z))))
+                      (fun (x, z) -> (AIntTermVar x, Term (ITerm (AITVar (ITUnApp z)))))
                       x2z_map))
                 (List.map
-                   (fun (x, y) -> (ATermVar y, Term (ATVar (TUnApp x))))
+                   (fun (x, y) -> (AIntTermVar y, Term (ITerm (AITVar (ITUnApp x)))))
                    x2y_map);
           };
       }
@@ -952,18 +952,18 @@ let ite_vector_state_template prog_setter b a1 a2
               (let post_p1 =
                  subs_several (get_conclusion then_hyp).trip.pre
                    (List.map
-                      (fun (x, z) -> (ATermVar z, Term (ATVar (TUnApp x))))
+                      (fun (x, z) -> (AIntTermVar z, Term (ITerm (AITVar (ITUnApp x)))))
                       x2z_map)
                in
                subs post_p1 (ABoolVar b_loop) (Boolean (ABVar (BUnApp BT))));
-            (* let i : term_var =
+            (* let i : int_term_var =
                  T (fresh_var_name post_p1 [ var_tostr (ABoolVar b_loop) ])
                in
                Implies
                  ( Forall
-                     ( TermVar i,
+                     ( IntTermVar i,
                        Iff
-                         (ABVar (BApp (BT, TVar i)), ABVar (BApp (b_loop, TVar i)))
+                         (ABVar (BApp (BT, ITVar i)), ABVar (BApp (b_loop, ITVar i)))
                      ),
                    post_p1 )); *)
           };

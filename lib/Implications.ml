@@ -76,16 +76,16 @@ let rec get_bholes form =
            let newv_name = fresh_var_name form (List.map var_tostr varset) in
            let newv =
              match v with
-             | TermVar _ -> TermVar (T newv_name)
+             | IntTermVar _ -> IntTermVar (T newv_name)
              | BoolVar _ -> BoolVar (B newv_name)
-             | ATermVar _ -> ATermVar (T newv_name)
+             | AIntTermVar _ -> AIntTermVar (T newv_name)
              | ABoolVar _ -> ABoolVar (B newv_name)
            in
            let newv_exp =
              match newv with
-             | TermVar tv -> Term (TVar tv)
+             | IntTermVar tv -> Term (ITVar tv)
              | BoolVar bv -> Boolean (BVar bv)
-             | ATermVar atv -> Term (ATVar (UnApp atv))
+             | AIntTermVar atv -> Term (AITVar (UnApp atv))
              | ABoolVar abv -> Boolean (ABVar (UnApp abv))
            in
            universal_collecter (subs form v newv_exp) (List.cons newv varset)
@@ -127,16 +127,16 @@ let rec get_bholes form =
            let newv_name = fresh_var_name form (List.map var_tostr varset) in
            let newv =
              match v with
-             | TermVar _ -> TermVar (T newv_name)
+             | IntTermVar _ -> IntTermVar (T newv_name)
              | BoolVar _ -> BoolVar (B newv_name)
-             | ATermVar _ -> ATermVar (T newv_name)
+             | AIntTermVar _ -> AIntTermVar (T newv_name)
              | ABoolVar _ -> ABoolVar (B newv_name)
            in
            let newv_exp =
              match newv with
-             | TermVar tv -> Term (TVar tv)
+             | IntTermVar tv -> Term (ITVar tv)
              | BoolVar bv -> Boolean (BVar bv)
-             | ATermVar atv -> Term (ATVar (UnApp atv))
+             | AIntTermVar atv -> Term (AITVar (UnApp atv))
              | ABoolVar abv -> Boolean (ABVar (UnApp abv))
            in
            existential_collecter (subs form v newv_exp) (List.cons newv varset)
@@ -207,17 +207,12 @@ let rec deconjunctivizer_lhs form varset =
         in
         let newv =
           match v with
-          | TermVar _ -> TermVar (T newv_name)
+          | IntTermVar _ -> IntTermVar (T newv_name)
           | BoolVar _ -> BoolVar (B newv_name)
-          | ATermVar _ -> ATermVar (T newv_name)
+          | AIntTermVar _ -> AIntTermVar (T newv_name)
           | ABoolVar _ -> ABoolVar (B newv_name)
         in
-        let newv_exp =
-          match newv with
-          | TermVar tv -> Term (TVar tv)
-          | BoolVar bv -> Boolean (BVar bv)
-          | ATermVar atv -> Term (ATVar (TUnApp atv))
-          | ABoolVar abv -> Boolean (ABVar (BUnApp abv))
+        let newv_exp = var_to_exp newv 
         in
         let new_form, varset, existed = deconjunctivizer_lhs (subs body v newv_exp) (VS.add newv varset) in
         (new_form, varset, VS.add newv existed)
@@ -243,17 +238,12 @@ let rec deconjunctivizer_rhs form varset =
         in
         let newv =
           match v with
-          | TermVar _ -> TermVar (T newv_name)
+          | IntTermVar _ -> IntTermVar (T newv_name)
           | BoolVar _ -> BoolVar (B newv_name)
-          | ATermVar _ -> ATermVar (T newv_name)
+          | AIntTermVar _ -> AIntTermVar (T newv_name)
           | ABoolVar _ -> ABoolVar (B newv_name)
         in
-        let newv_exp =
-          match newv with
-          | TermVar tv -> Term (TVar tv)
-          | BoolVar bv -> Boolean (BVar bv)
-          | ATermVar atv -> Term (ATVar (TUnApp atv))
-          | ABoolVar abv -> Boolean (ABVar (BUnApp abv))
+        let newv_exp = var_to_exp newv
         in
         deconjunctivizer_rhs (subs body v newv_exp) (VS.add newv varset)
       else deconjunctivizer_rhs body (VS.add v varset)
@@ -282,20 +272,23 @@ let deconjunctivizer pre post =
 
 (* WRITING *)
 (* Writing formulas to smt files *)
-let rec to_smt_helper_term term =
-  match term with
+let rec to_smt_helper_int_term int_term =
+  match int_term with
   | Int i ->
       if i < 0 then Printf.sprintf "(- %d)" (-1 * i) else Printf.sprintf "%d" i
-  | TVar v -> var_tostr (TermVar v)
-  | Minus t -> Printf.sprintf "(- %s)" (to_smt_helper_term t)
+  | ITVar v -> var_tostr (IntTermVar v)
+  | Minus t -> Printf.sprintf "(- %s)" (to_smt_helper_int_term t)
   | Plus (t1, t2) ->
-      Printf.sprintf "(+ %s %s)" (to_smt_helper_term t1) (to_smt_helper_term t2)
+      Printf.sprintf "(+ %s %s)" (to_smt_helper_int_term t1) (to_smt_helper_int_term t2)
   | Times (t1, t2) ->
-      Printf.sprintf "(* %s %s)" (to_smt_helper_term t1) (to_smt_helper_term t2)
+      Printf.sprintf "(* %s %s)" (to_smt_helper_int_term t1) (to_smt_helper_int_term t2)
   | THole (s, arg_list) ->
       Printf.sprintf "(%s %s)" s
         (String.concat " " (List.map to_smt_helper_exp arg_list))
   | _ -> raise (Unsupported_Formula_Constructor 1)
+
+and to_smt_helper_term term =
+  match term with | ITerm it -> to_smt_helper_int_term it  
 
 and to_smt_helper form =
   match form with
@@ -315,14 +308,14 @@ and to_smt_helper form =
       Printf.sprintf "(< %s %s)" (to_smt_helper_term t1) (to_smt_helper_term t2)
   | Iff (b1, b2) ->
       Printf.sprintf "(= %s %s)" (to_smt_helper b1) (to_smt_helper b2)
-  | Exists (TermVar v, b) ->
-      Printf.sprintf "(exists ((%s Int) ) %s)" (var_tostr (TermVar v))
+  | Exists (IntTermVar v, b) ->
+      Printf.sprintf "(exists ((%s Int) ) %s)" (var_tostr (IntTermVar v))
         (to_smt_helper b)
   | Exists (BoolVar v, b) ->
       Printf.sprintf "(exists ((%s Bool) ) %s)" (var_tostr (BoolVar v))
         (to_smt_helper b)
-  | Forall (TermVar v, b) ->
-      Printf.sprintf "(forall ((%s Int) ) %s)" (var_tostr (TermVar v))
+  | Forall (IntTermVar v, b) ->
+      Printf.sprintf "(forall ((%s Int) ) %s)" (var_tostr (IntTermVar v))
         (to_smt_helper b)
   | Forall (BoolVar v, b) ->
       Printf.sprintf "(forall ((%s Bool) ) %s)" (var_tostr (BoolVar v))
@@ -354,31 +347,34 @@ let to_negated_smt_z3 form name =
          match var with
          | BoolVar _ ->
              Printf.sprintf "%s(declare-const %s Bool)\n" str (var_tostr var)
-         | TermVar _ ->
+         | IntTermVar _ ->
              Printf.sprintf "%s(declare-const %s Int)\n" str (var_tostr var)
          | _ -> raise (Unsupported_Formula_Constructor 3))
        (free_vars form VS.empty) "")
     (to_smt_helper form)
 
 (* Writing formulas to vampire files. *)
-let rec to_smt_helper_term_vamp term =
-  match term with
+let rec to_smt_helper_int_term_vamp int_term =
+  match int_term with
   | Int i ->
       if i < 0 then Printf.sprintf "(- %d)" (-1 * i) else Printf.sprintf "%d" i
-  | TVar v -> var_tostr (TermVar v)
-  | Minus t -> Printf.sprintf "(- %s)" (to_smt_helper_term_vamp t)
+  | ITVar v -> var_tostr (IntTermVar v)
+  | Minus t -> Printf.sprintf "(- %s)" (to_smt_helper_int_term_vamp t)
   | Plus (t1, t2) ->
       Printf.sprintf "(+ %s %s)"
-        (to_smt_helper_term_vamp t1)
-        (to_smt_helper_term_vamp t2)
+        (to_smt_helper_int_term_vamp t1)
+        (to_smt_helper_int_term_vamp t2)
   | Times (t1, t2) ->
       Printf.sprintf "(* %s %s)"
-        (to_smt_helper_term_vamp t1)
-        (to_smt_helper_term_vamp t2)
-  | ATVar (TApp (at, i)) ->
-      Printf.sprintf "(select %s %s)" (var_tostr (ATermVar at))
-        (to_smt_helper_term_vamp i)
+        (to_smt_helper_int_term_vamp t1)
+        (to_smt_helper_int_term_vamp t2)
+  | AITVar (ITApp (at, i)) ->
+      Printf.sprintf "(select %s %s)" (var_tostr (AIntTermVar at))
+        (to_smt_helper_int_term_vamp i)
   | _ -> raise (Unsupported_Formula_Constructor 4)
+
+let to_smt_helper_term_vamp term = 
+  match term with | ITerm it -> to_smt_helper_int_term_vamp it
 
 let rec to_smt_helper_vamp form =
   match form with
@@ -397,7 +393,7 @@ let rec to_smt_helper_vamp form =
   | BVar v -> var_tostr (BoolVar v)
   | ABVar (BApp (at, i)) ->
       Printf.sprintf "(select %s %s)" (var_tostr (ABoolVar at))
-        (to_smt_helper_term_vamp i)
+        (to_smt_helper_int_term_vamp i)
   | Equals (t1, t2) ->
       Printf.sprintf "(= %s %s)"
         (to_smt_helper_term_vamp t1)
@@ -408,24 +404,24 @@ let rec to_smt_helper_vamp form =
         (to_smt_helper_term_vamp t2)
   | Iff (b1, b2) ->
       Printf.sprintf "(= %s %s)" (to_smt_helper_vamp b1) (to_smt_helper_vamp b2)
-  | Exists (TermVar v, b) ->
-      Printf.sprintf "(exists ((%s Int) ) %s)" (var_tostr (TermVar v))
+  | Exists (IntTermVar v, b) ->
+      Printf.sprintf "(exists ((%s Int) ) %s)" (var_tostr (IntTermVar v))
         (to_smt_helper_vamp b)
-  | Exists (ATermVar v, b) ->
+  | Exists (AIntTermVar v, b) ->
       Printf.sprintf "(exists ((%s (Array Int Int)) ) %s)"
-        (var_tostr (ATermVar v)) (to_smt_helper_vamp b)
+        (var_tostr (AIntTermVar v)) (to_smt_helper_vamp b)
   | Exists (BoolVar v, b) ->
       Printf.sprintf "(exists ((%s Bool) ) %s)" (var_tostr (BoolVar v))
         (to_smt_helper_vamp b)
   | Exists (ABoolVar v, b) ->
       Printf.sprintf "(exists ((%s (Array Int Bool)) ) %s)"
         (var_tostr (ABoolVar v)) (to_smt_helper_vamp b)
-  | Forall (TermVar v, b) ->
-      Printf.sprintf "(forall ((%s Int) ) %s)" (var_tostr (TermVar v))
+  | Forall (IntTermVar v, b) ->
+      Printf.sprintf "(forall ((%s Int) ) %s)" (var_tostr (IntTermVar v))
         (to_smt_helper_vamp b)
-  | Forall (ATermVar v, b) ->
+  | Forall (AIntTermVar v, b) ->
       Printf.sprintf "(forall ((%s (Array Int Int)) ) %s)"
-        (var_tostr (ATermVar v)) (to_smt_helper_vamp b)
+        (var_tostr (AIntTermVar v)) (to_smt_helper_vamp b)
   | Forall (BoolVar v, b) ->
       Printf.sprintf "(forall ((%s Bool) ) %s)" (var_tostr (BoolVar v))
         (to_smt_helper_vamp b)
@@ -449,9 +445,9 @@ let to_negated_smt_vampire form name =
     (VS.fold
        (fun var str ->
          match var with
-         | TermVar _ ->
+         | IntTermVar _ ->
              Printf.sprintf "%s(declare-const %s Int)\n" str (var_tostr var)
-         | ATermVar _ ->
+         | AIntTermVar _ ->
              Printf.sprintf "%s(declare-const %s (Array Int Int))\n" str
                (var_tostr var)
          | BoolVar _ ->
@@ -475,7 +471,7 @@ let to_sygus constraints bool_hole_list term_hole_list =
            match var with
            | BoolVar _ ->
                Printf.sprintf "%s(declare-var %s Bool)\n" str (var_tostr var)
-           | TermVar _ ->
+           | IntTermVar _ ->
                Printf.sprintf "%s(declare-var %s Int)\n" str (var_tostr var)
            | _ -> raise (Unsupported_Formula_Constructor 6))
          f_vars "")
@@ -493,7 +489,7 @@ let to_sygus constraints bool_hole_list term_hole_list =
                         match var with
                         | BoolVar _ ->
                             Printf.sprintf "(%s Bool)" (var_tostr var)
-                        | TermVar _ -> Printf.sprintf "(%s Int)" (var_tostr var)
+                        | IntTermVar _ -> Printf.sprintf "(%s Int)" (var_tostr var)
                         | _ -> raise (Unsupported_Formula_Constructor 7))
                       vl)))
             bool_hole_list))
@@ -510,7 +506,7 @@ let to_sygus constraints bool_hole_list term_hole_list =
                       match var with
                       | BoolVar _ ->
                           Printf.sprintf "(%s Bool)" (var_tostr var)
-                      | TermVar _ -> Printf.sprintf "(%s Int)" (var_tostr var)
+                      | IntTermVar _ -> Printf.sprintf "(%s Int)" (var_tostr var)
                       | _ -> raise (Unsupported_Formula_Constructor 7))
                     vl)))
           term_hole_list))
@@ -633,12 +629,12 @@ let no_hole_simple_implicator_z3 () =
       List.map
         (fun hole_var ->
           match hole_var with
-          | TermVar _ ->
+          | IntTermVar _ ->
               ( hole_var,
-                Term (THole (var_tostr hole_var, important_vars_as_exps)) )
-          | ATermVar _ ->
+                Term (ITerm (THole (var_tostr hole_var, important_vars_as_exps))) )
+          | AIntTermVar _ ->
               ( hole_var,
-                Term (THole (var_tostr hole_var, important_vars_as_exps)) )
+                Term (ITerm (THole (var_tostr hole_var, important_vars_as_exps))) )
           | BoolVar _ ->
               ( hole_var,
                 Boolean (BHole (var_tostr hole_var, important_vars_as_exps)) )
@@ -852,7 +848,7 @@ let implicator_hole_synth_cvc5 () =
                       match v with
                       | Term _ ->
                           i := !i + 1;
-                          TermVar (T (Printf.sprintf "a_%d" !i))
+                          IntTermVar (T (Printf.sprintf "a_%d" !i))
                       | Boolean _ ->
                           i := !i + 1;
                           BoolVar (B (Printf.sprintf "a_%d" !i)))
@@ -995,7 +991,6 @@ module NoHoleSimpleImplicatorZ3 () : ImplicationHandler = struct
   let base_verif = no_hole_simple_implicator_z3 ()
 
   let implies pre post =
-    print_endline "e";
     List.fold_left
       (fun lazy_boolean (form, existed) ->
         lazy (Lazy.force lazy_boolean && Lazy.force (base_verif form existed)))
@@ -1024,18 +1019,22 @@ module NoHoleVectorStateImplicatorVampire () : ImplicationHandler = struct
   let hole_values = lazy []
 end
 
+(* Functions to transform formulas over many indices to formulas over only a few indices when vector length is bounded. *)
 let indexer var_name index = Printf.sprintf "%s_finitevscpy_%d" var_name index
 
-let rec term_fininte_vs_transformer term =
-  match term with
-  | ATVar (TApp (ET, Int i)) -> TVar (T (indexer "e_t" i))
-  | ATVar (TApp (T v, Int i)) -> TVar (T (indexer v i))
-  | Minus t -> Minus (term_fininte_vs_transformer t)
+let rec int_term_finite_vs_transformer int_term =
+  match int_term with
+  | AITVar (ITApp (ET, Int i)) -> ITVar (T (indexer "e_t" i))
+  | AITVar (ITApp (T v, Int i)) -> ITVar (T (indexer v i))
+  | Minus t -> Minus (int_term_finite_vs_transformer t)
   | Plus (t1, t2) ->
-      Plus (term_fininte_vs_transformer t1, term_fininte_vs_transformer t2)
+      Plus (int_term_finite_vs_transformer t1, int_term_finite_vs_transformer t2)
   | Times (t1, t2) ->
-      Times (term_fininte_vs_transformer t1, term_fininte_vs_transformer t2)
-  | _ -> term
+      Times (int_term_finite_vs_transformer t1, int_term_finite_vs_transformer t2)
+  | _ -> int_term
+
+let term_finite_vs_transformer term =
+  match term with | ITerm it -> ITerm (int_term_finite_vs_transformer it)
 
 let rec bool_finite_vs_transformer max_ind form =
   match form with
@@ -1055,20 +1054,20 @@ let rec bool_finite_vs_transformer max_ind form =
         ( bool_finite_vs_transformer max_ind f1,
           bool_finite_vs_transformer max_ind f2 )
   | Equals (t1, t2) ->
-      Equals (term_fininte_vs_transformer t1, term_fininte_vs_transformer t2)
+      Equals (term_finite_vs_transformer t1, term_finite_vs_transformer t2)
   | Less (t1, t2) ->
-      Less (term_fininte_vs_transformer t1, term_fininte_vs_transformer t2)
+      Less (term_finite_vs_transformer t1, term_finite_vs_transformer t2)
   | Iff (f1, f2) ->
       Iff
         ( bool_finite_vs_transformer max_ind f1,
           bool_finite_vs_transformer max_ind f2 )
   | Exists (v, f) -> (
       match v with
-      | TermVar _ -> Exists (v, bool_finite_vs_transformer max_ind f)
+      | IntTermVar _ -> Exists (v, bool_finite_vs_transformer max_ind f)
       | BoolVar _ -> Exists (v, bool_finite_vs_transformer max_ind f)
-      | ATermVar (T t) ->
+      | AIntTermVar (T t) ->
           List.fold_left
-            (fun form i -> Exists (TermVar (T (indexer t i)), form))
+            (fun form i -> Exists (IntTermVar (T (indexer t i)), form))
             (bool_finite_vs_transformer max_ind f)
             (List.init max_ind (fun n -> n + 1))
       | ABoolVar (B b) ->
@@ -1079,11 +1078,11 @@ let rec bool_finite_vs_transformer max_ind form =
       | _ -> raise (Unsupported_Formula_Constructor 8))
   | Forall (v, f) -> (
       match v with
-      | TermVar _ -> Forall (v, bool_finite_vs_transformer max_ind f)
+      | IntTermVar _ -> Forall (v, bool_finite_vs_transformer max_ind f)
       | BoolVar _ -> Forall (v, bool_finite_vs_transformer max_ind f)
-      | ATermVar (T t) ->
+      | AIntTermVar (T t) ->
           List.fold_left
-            (fun form i -> Forall (TermVar (T (indexer t i)), form))
+            (fun form i -> Forall (IntTermVar (T (indexer t i)), form))
             (bool_finite_vs_transformer max_ind f)
             (List.init max_ind (fun n -> n + 1))
       | ABoolVar (B b) ->
@@ -1103,7 +1102,7 @@ let rec bool_finite_vs_transformer max_ind form =
                  arg_list))
       in
       BHole (h, big_args_list)
-  | T (f, b_loop, t_map) ->
+  | T (f, b_loop, vmaps) ->
       (* A list of (positive variables, formulas) for all 2^n combinations of bt[i] for the indices i appearing in t. If no indices appear, then it's just True.
          E.g., [([1, 2], bloop[1] && bloop[2]], ([1], bloop[1] && !bloop[2]), ([2], !bloop[1] && bloop[2]), ([], !bloop[1] && !bloop[2])] *)
       let t_guards =
@@ -1133,10 +1132,17 @@ let rec bool_finite_vs_transformer max_ind form =
                     List.fold_left
                       (fun hole (oldv, newv) ->
                         subs hole
-                          (TermVar (T (indexer (var_tostr (ATermVar oldv)) ind)))
-                          (Term
-                             (TVar (T (indexer (var_tostr (ATermVar newv)) ind)))))
-                      hole (VMap_AT.bindings t_map))
+                          (IntTermVar (T (indexer (var_tostr (AIntTermVar oldv)) ind)))
+                          (Term (ITerm
+                            (ITVar (T (indexer (var_tostr (AIntTermVar newv)) ind))))))
+                    (List.fold_left
+                      (fun hole (oldv, newv) ->
+                        subs hole
+                          (IntTermVar (T (indexer (var_tostr (AIntTermVar oldv)) ind)))
+                          (Term (ITerm
+                             (ITVar (T (indexer (var_tostr (AIntTermVar newv)) ind))))))
+                      hole (VMap_AIT.bindings vmaps.int_map))
+                      (VMap_ABitvT.bindings vmaps.bitv_map))
                   expanded_hole off_inds ))
           t_guards
       in
@@ -1154,7 +1160,7 @@ let rec bool_finite_vs_transformer max_ind form =
 
 and exp_finite_vs_transformer max_ind exp =
   match exp with
-  | Term t -> Term (term_fininte_vs_transformer t)
+  | Term t -> Term (term_finite_vs_transformer t)
   | Boolean b -> Boolean (bool_finite_vs_transformer max_ind b)
 
 let finite_holeless_implicator max_ind =

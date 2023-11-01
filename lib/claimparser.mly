@@ -89,28 +89,31 @@ form_arg:
   | LEFT_PAREN ET ARRAY_INT_KWD RIGHT_PAREN {raise Parse_Bad_Formula}
   | LEFT_PAREN BT BOOL_KWD RIGHT_PAREN {raise Parse_Bad_Formula}
   | LEFT_PAREN BT ARRAY_BOOL_KWD RIGHT_PAREN {raise Parse_Bad_Formula}
-  | LEFT_PAREN s=STRING INT_KWD RIGHT_PAREN {Variable.TermVar (T s)}
+  | LEFT_PAREN s=STRING INT_KWD RIGHT_PAREN {Variable.IntTermVar (T s)}
   | LEFT_PAREN s=STRING BOOL_KWD RIGHT_PAREN {Variable.BoolVar (B s)}
-  | LEFT_PAREN s=STRING ARRAY_INT_KWD RIGHT_PAREN {Variable.ATermVar (T s)}
+  | LEFT_PAREN s=STRING ARRAY_INT_KWD RIGHT_PAREN {Variable.AIntTermVar (T s)}
   | LEFT_PAREN s=STRING ARRAY_BOOL_KWD RIGHT_PAREN {Variable.ABoolVar (B s)}
 
-form_term:
+form_int_term:
   | i = INT {Int i}
-  | ET {TVar ET}
-  | ET LEFT_SQUARE index=form_term RIGHT_SQUARE {ATVar (TApp (ET, index))}
-  | s = STRING {TVar (T s)}
-  | s = STRING LEFT_SQUARE index=form_term RIGHT_SQUARE {ATVar (TApp (T s, index))}
-  | LEFT_PAREN MINUS t=form_term RIGHT_PAREN {Formula.Minus t}
-  | LEFT_PAREN PLUS t1=form_term t2=form_term RIGHT_PAREN {Formula.Plus (t1, t2)}
-  | LEFT_PAREN TIMES t1=form_term t2=form_term RIGHT_PAREN {Formula.Times (t1, t2)}
+  | ET {ITVar ET}
+  | ET LEFT_SQUARE index=form_int_term RIGHT_SQUARE {AITVar (ITApp (ET, index))}
+  | s = STRING {ITVar (T s)}
+  | s = STRING LEFT_SQUARE index=form_int_term RIGHT_SQUARE {AITVar (ITApp (T s, index))}
+  | LEFT_PAREN MINUS t=form_int_term RIGHT_PAREN {Formula.Minus t}
+  | LEFT_PAREN PLUS t1=form_int_term t2=form_int_term RIGHT_PAREN {Formula.Plus (t1, t2)}
+  | LEFT_PAREN TIMES t1=form_int_term t2=form_int_term RIGHT_PAREN {Formula.Times (t1, t2)}
+
+form_term:
+  | it=form_int_term {ITerm it}
 
 formula:
   | TRUE {True}
   | FALSE {False}
   | BT {BVar BT}
-  | BT LEFT_SQUARE index=form_term RIGHT_SQUARE {ABVar (BApp (BT, index))}
+  | BT LEFT_SQUARE index=form_int_term RIGHT_SQUARE {ABVar (BApp (BT, index))}
   | s = STRING {BVar (B s)}
-  | s = STRING LEFT_SQUARE index=form_term RIGHT_SQUARE {ABVar (BApp (B s, index))}
+  | s = STRING LEFT_SQUARE index=form_int_term RIGHT_SQUARE {ABVar (BApp (B s, index))}
   | LEFT_PAREN AND f1=formula f2=formula RIGHT_PAREN {And (f1, f2)}
   | LEFT_PAREN OR f1=formula f2=formula RIGHT_PAREN {Or (f1, f2)}
   | LEFT_PAREN NOT f=formula RIGHT_PAREN {Not f}
@@ -217,17 +220,17 @@ var_pairs:
 
 var_pair:
   | LEFT_PAREN v1=var COMMA v2=var RIGHT_PAREN {match (v1, v2) with
-    | (TermVar _, TermVar _) -> (v1, v2)
-    | (ATermVar _, ATermVar _) -> (v1, v2)
+    | (IntTermVar _, IntTermVar _) -> (v1, v2)
+    | (AIntTermVar _, AIntTermVar _) -> (v1, v2)
     | (BoolVar _, BoolVar _) -> (v1, v2)
     | (ABoolVar _, ABoolVar _) -> (v1, v2)
     | _ -> raise Parse_Bad_Formula}
 
 var:
-  | INT_KWD s=STRING {TermVar (T s)}
-  | INT_KWD ET {TermVar ET}
-  | ARRAY_INT_KWD s=STRING {ATermVar (T s)}
-  | ARRAY_INT_KWD ET {ATermVar ET}
+  | INT_KWD s=STRING {IntTermVar (T s)}
+  | INT_KWD ET {IntTermVar ET}
+  | ARRAY_INT_KWD s=STRING {AIntTermVar (T s)}
+  | ARRAY_INT_KWD ET {AIntTermVar ET}
   | BOOL_KWD s=STRING {BoolVar (B s)}
   | BOOL_KWD BT {BoolVar BT}
   | ARRAY_BOOL_KWD s1=STRING {ABoolVar (B s1)}
@@ -246,11 +249,11 @@ vars:
   | v=var_as_exp COMMA v_list=vars {List.cons v v_list}
 
 var_as_exp:
-  | INT_KWD ET {Term (TVar ET)}
+  | INT_KWD ET {Term (ITerm (ITVar ET))}
   | BOOL_KWD BT {Logic.Formula.Boolean (BVar BT)}
-  | INT_KWD s=STRING {Term (TVar (T s))}
+  | INT_KWD s=STRING {Term (ITerm (ITVar (T s)))}
   | BOOL_KWD s=STRING {Logic.Formula.Boolean (BVar (B s))}
-  | ARRAY_INT_KWD ET {Term (ATVar (TUnApp ET))}
+  | ARRAY_INT_KWD ET {Term (ITerm (AITVar (ITUnApp ET)))}
   | ARRAY_BOOL_KWD BT {Logic.Formula.Boolean (ABVar (BUnApp BT))}
-  | ARRAY_INT_KWD s=STRING {Term (ATVar (TUnApp (T s)))}
+  | ARRAY_INT_KWD s=STRING {Term (ITerm (AITVar (ITUnApp (T s))))}
   | ARRAY_BOOL_KWD s=STRING {Logic.Formula.Boolean (ABVar (BUnApp (B s)))}

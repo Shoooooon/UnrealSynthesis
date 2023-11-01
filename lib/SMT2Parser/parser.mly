@@ -2,7 +2,7 @@
     open Logic
     open Logic.Formula
     open Logic.Variable
-    exception Parse_Bad_TVar
+    exception Parse_Bad_ITVar
     exception Parse_Bad_BVar
     exception Parse_Bad_Var
     exception Parse_Bad_Equals_Type_Mismatch
@@ -45,16 +45,19 @@ args_list:
   |LEFT_PAREN args=args RIGHT_PAREN {variable_context := List.append args !variable_context; args}
 
 args:
-  |LEFT_PAREN s=STRING INT_KWD RIGHT_PAREN {[Variable.TermVar (T s)]}
+  |LEFT_PAREN s=STRING INT_KWD RIGHT_PAREN {[Variable.IntTermVar (T s)]}
   |LEFT_PAREN s=STRING BOOL_KWD RIGHT_PAREN {[Variable.BoolVar (B s)]}
-  |LEFT_PAREN s=STRING INT_KWD RIGHT_PAREN args=args {List.cons (Variable.TermVar (T s)) args}
+  |LEFT_PAREN s=STRING INT_KWD RIGHT_PAREN args=args {List.cons (Variable.IntTermVar (T s)) args}
   |LEFT_PAREN s=STRING BOOL_KWD RIGHT_PAREN args=args {List.cons (Variable.BoolVar (B s)) args}
 
 term:
+  | t=int_term {ITerm t}
+
+int_term:
   | i = INT {Int i}
-  | s = STRING {if s = "e_t" then (TVar ET) else (if (List.mem (Variable.TermVar (T s)) !variable_context) then (TVar (T s)) else raise Parse_Bad_TVar)}
-  | LEFT_PAREN MINUS t=term RIGHT_PAREN {Formula.Minus t}
-  | LEFT_PAREN PLUS t1=term t2=term RIGHT_PAREN {Formula.Plus (t1, t2)}
+  | s = STRING {if s = "e_t" then (ITVar ET) else (if (List.mem (Variable.IntTermVar (T s)) !variable_context) then (ITVar (T s)) else raise Parse_Bad_ITVar)}
+  | LEFT_PAREN MINUS t=int_term RIGHT_PAREN {Formula.Minus t}
+  | LEFT_PAREN PLUS t1=int_term t2=int_term RIGHT_PAREN {Formula.Plus (t1, t2)}
 
 form:
   | TRUE {True}
@@ -77,9 +80,9 @@ form:
   | FORALL quants=args_list body=form {popper (List.length quants); (List.fold_left make_forall body quants)} 
   
 exp:
-  | i = INT {Term (Int i)}
-  | LEFT_PAREN MINUS t=term RIGHT_PAREN {Term (Formula.Minus t)}
-  | LEFT_PAREN PLUS t1=term t2=term RIGHT_PAREN {Term (Formula.Plus (t1, t2))}
+  | i = INT {Term (ITerm (Int i))}
+  | LEFT_PAREN MINUS t=int_term RIGHT_PAREN {Term (ITerm (Formula.Minus t))}
+  | LEFT_PAREN PLUS t1=int_term t2=int_term RIGHT_PAREN {Term (ITerm (Formula.Plus (t1, t2)))}
   | TRUE {Boolean True}
   | FALSE {Boolean False}
   | LEFT_PAREN AND f1=form f2=form RIGHT_PAREN {Boolean (And (f1, f2))}
@@ -97,9 +100,9 @@ exp:
   | LEFT_PAREN GREATER_EQUALS t1=term t2=term RIGHT_PAREN {Boolean (Or (Less (t2, t1), Equals (t2, t1)))}
   | EXISTS quants=args_list body=form {popper (List.length quants); Boolean (List.fold_left make_exists body quants)} 
   | FORALL quants=args_list body=form {popper (List.length quants); Boolean (List.fold_left make_forall body quants)} 
-  | s = STRING {if s = "e_t" then Term (TVar ET) 
+  | s = STRING {if s = "e_t" then Term (ITerm (ITVar ET)) 
   else if s = "b_t" then Boolean (BVar BT)
   else if (List.mem (BoolVar (B s)) !variable_context) then Boolean (BVar (B s)) 
-  else if (List.mem (TermVar (T s)) !variable_context) then Term (TVar (T s))
+  else if (List.mem (IntTermVar (T s)) !variable_context) then Term (ITerm (ITVar (T s)))
   else raise Parse_Bad_Var}
   

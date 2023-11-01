@@ -40,8 +40,8 @@ examples_to_pre_post:
     vl=vars_list il=int_list {
       (match (List.fold_left (fun (index, form, outs, vars) integer ->
           (match vars with
-          | [] -> (index + 1, form, Logic.Formula.And (outs, (Equals (ATVar (TApp (ET, Int index)), (Int integer)))), vl)
-          | (hd::tl) -> (index, Logic.Formula.And (form, Equals (ATVar (TApp ((T hd), Int index)), (Int integer))), outs, tl)))
+          | [] -> (index + 1, form, Logic.Formula.And (outs, (Equals (ITerm (AITVar (ITApp (ET, Int index))), ITerm (Int integer)))), vl)
+          | (hd::tl) -> (index, Logic.Formula.And (form, Equals (ITerm (AITVar (ITApp ((T hd), Int index))), ITerm (Int integer))), outs, tl)))
           (1, Logic.Formula.True, Logic.Formula.True, vl)
           il) with
           | (_, pre, post, _) -> (pre, Not post))
@@ -65,10 +65,10 @@ prog:
       (* TODO: We need b_t=b_t_2 and same for e_t so that, when nonterminals are plugged in, we generate e_t_y and b_t_y.
           At some point, we should remove these equalities and make the special behavior of e_t and b_t explicit when applying Adapt. *)
       List.cons (ABoolVar BT, ABoolVar (B "b_t_cpy")) 
-      (List.cons (ATermVar ET, ATermVar (T "e_t_cpy"))
+      (List.cons (AIntTermVar ET, AIntTermVar (T "e_t_cpy"))
       (List.map (fun x -> 
       match x with
-      | ATermVar _ -> (x, (ATermVar (T (Printf.sprintf "%s_cpy" (var_tostr x)))))
+      | AIntTermVar _ -> (x, (AIntTermVar (T (Printf.sprintf "%s_cpy" (var_tostr x)))))
       | ABoolVar _ -> (x, (ABoolVar (B (Printf.sprintf "%s_cpy" (var_tostr x)))))
       | _ -> raise Bad) tvl) )
       in
@@ -82,12 +82,12 @@ prog:
         and program_vars = (get_program_vars nterm_prog) in
         Some (reassigned_pairs, 
         BHole ((Printf.sprintf "hole_%s" name), 
-        (List.map (fun x -> match x with TermVar ET -> (Term (ATVar (TUnApp ET))) 
-          | TermVar (T t) -> (Term (ATVar (TUnApp (T t)))) 
+        (List.map (fun x -> match x with IntTermVar ET -> (Term (ITerm (AITVar (ITUnApp ET)))) 
+          | IntTermVar (T t) -> (Term (ITerm (AITVar (ITUnApp (T t))))) 
           | BoolVar BT -> (Boolean (ABVar (BUnApp BT)))
           | BoolVar (B b) -> (Boolean (ABVar (BUnApp (B b))))
           | _ -> raise Bad)
-         (VS.elements (VS.remove (ABoolVar (B "b_t_cpy")) (VS.remove (ATermVar (T "e_t_cpy")) (VS.union program_vars reassigned_vars_and_copies))))
+         (VS.elements (VS.remove (ABoolVar (B "b_t_cpy")) (VS.remove (AIntTermVar (T "e_t_cpy")) (VS.union program_vars reassigned_vars_and_copies))))
          )))) 
       in
         (Numeric ((fun gram -> (if (List.exists (fun n -> (Programs.NonTerminal.name n)= "Start") (Lazy.force gram).grammar_num)
@@ -97,11 +97,11 @@ prog:
 
 typed_vars_list_parens:
     LEFT_PAREN s=STRING INT_KWD RIGHT_PAREN {
-        [ATermVar (T s)]}
+        [AIntTermVar (T s)]}
     | LEFT_PAREN s=STRING BOOL_KWD RIGHT_PAREN {
         [ABoolVar (B s)]}
     | LEFT_PAREN s=STRING INT_KWD RIGHT_PAREN vl=typed_vars_list_parens {
-        List.cons (ATermVar (T s)) vl}
+        List.cons (AIntTermVar (T s)) vl}
     | LEFT_PAREN s=STRING BOOL_KWD RIGHT_PAREN vl=typed_vars_list_parens {
         List.cons (ABoolVar (B s)) vl}
 

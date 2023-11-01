@@ -137,7 +137,7 @@ let rec get_program_vars_helper prog examined =
   match prog with
   | Numeric (Int _) -> (VS.empty, examined)
   | Numeric (Var v) ->
-      (VS.singleton (TermVar (match v with "e_t" -> ET | _ -> T v)), examined)
+      (VS.singleton (IntTermVar (match v with "e_t" -> ET | _ -> T v)), examined)
   | Numeric (Plus (n1, n2)) ->
       let lhs_set, lhs_examined =
         get_program_vars_helper (Numeric n1) examined
@@ -218,7 +218,7 @@ let rec get_program_vars_helper prog examined =
       let rhs_set, rhs_examined =
         get_program_vars_helper (Numeric n) examined
       in
-      (VS.add (TermVar (T v)) rhs_set, rhs_examined)
+      (VS.add (IntTermVar (T v)) rhs_set, rhs_examined)
   | Stmt (Seq (s1, s2)) ->
       let lhs_set, lhs_examined = get_program_vars_helper (Stmt s1) examined in
       let rhs_set, rhs_examined =
@@ -258,7 +258,7 @@ let rec get_program_vars_helper prog examined =
 
 let get_program_vars prog =
   match prog with
-  | Numeric _ -> VS.add (TermVar ET) (fst (get_program_vars_helper prog []))
+  | Numeric _ -> VS.add (IntTermVar ET) (fst (get_program_vars_helper prog []))
   | Boolean _ -> VS.add (BoolVar BT) (fst (get_program_vars_helper prog []))
   | Stmt _ -> fst (get_program_vars_helper prog [])
 
@@ -268,7 +268,7 @@ let rec reassigned_vars_helper prog examined =
   match prog with
   | Numeric _ -> VS.empty
   | Boolean _ -> VS.empty
-  | Stmt (Assign (v, _)) -> VS.singleton (TermVar (T v))
+  | Stmt (Assign (v, _)) -> VS.singleton (IntTermVar (T v))
   | Stmt (Seq (s1, s2)) ->
       VS.union
         (reassigned_vars_helper (Stmt s1) examined)
@@ -290,13 +290,13 @@ let rec reassigned_vars_helper prog examined =
              (NonTerminal.expand n))
 
 let reassigned_vars prog =
-  VS.add (TermVar ET)
+  VS.add (IntTermVar ET)
     (VS.add (BoolVar BT) (reassigned_vars_helper prog SNTS.empty))
 
 (* Returns set of reassigned vars excluding ET and BT, unless the program is a bool or int *)
 let reassigned_vars_clean prog =
   match prog with
-  | Numeric _ -> VS.add (TermVar ET) (reassigned_vars_helper prog SNTS.empty)
+  | Numeric _ -> VS.add (IntTermVar ET) (reassigned_vars_helper prog SNTS.empty)
   | Boolean _ -> VS.add (BoolVar BT) (reassigned_vars_helper prog SNTS.empty)
   | Stmt _ -> reassigned_vars_helper prog SNTS.empty
 

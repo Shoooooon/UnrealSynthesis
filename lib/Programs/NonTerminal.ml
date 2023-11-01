@@ -51,10 +51,10 @@ let nonterminal_to_parseable_str_def nterm_type program_to_parseable_string
              (List.map
                 (fun (v1, v2) ->
                   match (v1, v2) with
-                  | TermVar _, TermVar _ ->
+                  | IntTermVar _, IntTermVar _ ->
                       Printf.sprintf "(Int %s, Int %s)" (var_tostr v1)
                         (var_tostr v2)
-                  | ATermVar _, ATermVar _ ->
+                  | AIntTermVar _, AIntTermVar _ ->
                       Printf.sprintf "(AInt %s, AInt %s)" (var_tostr v1)
                         (var_tostr v2)
                   | BoolVar _, BoolVar _ ->
@@ -72,12 +72,12 @@ let nonterminal_to_parseable_str_def nterm_type program_to_parseable_string
                    (List.map
                       (fun exp ->
                         match exp with
-                        | Term (TVar v) ->
-                            Printf.sprintf "Int %s" (var_tostr (TermVar v))
+                        | Term (ITerm (ITVar v)) ->
+                            Printf.sprintf "Int %s" (var_tostr (IntTermVar v))
                         | Boolean (BVar v) ->
                             Printf.sprintf "Bool %s" (var_tostr (BoolVar v))
-                        | Term (ATVar (TUnApp v)) ->
-                            Printf.sprintf "AInt %s" (var_tostr (ATermVar v))
+                        | Term (ITerm (AITVar (ITUnApp v))) ->
+                            Printf.sprintf "AInt %s" (var_tostr (AIntTermVar v))
                         | Boolean (ABVar (BUnApp v)) ->
                             Printf.sprintf "ABool %s" (var_tostr (ABoolVar v))
                         | _ -> raise Bad_Strongest)
