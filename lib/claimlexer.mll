@@ -8,6 +8,7 @@
 let white = [' ' '\t']+
 let newline = '\r' | '\n' | "\r\n"
 let int = '-'? ['0'-'9'] ['0'-'9']*
+let bitv = '#' ['b' 'x'] ['0'-'9' 'a'- 'f'] ['0'-'9' 'a'- 'f']*
 let varName = ['a'-'z' 'A'-'Z']['0'-'9' 'a'-'z' 'A'-'Z' '_']*
 
 
@@ -16,7 +17,10 @@ rule read =
   | white    { read lexbuf }
   | newline  { read lexbuf }
   | int      { INT (int_of_string (Lexing.lexeme lexbuf)) }
+  | bitv     { BITV (Lexing.lexeme lexbuf)}
   | "Int" {INT_KWD}
+  | "ABitvec" {ARRAY_BITVEC_KWD}
+  | "Bitvec" {BITVEC_KWD}
   | "Bool" {BOOL_KWD} 
   | "AInt" {ARRAY_INT_KWD}
   | "ABool" {ARRAY_BOOL_KWD} 
@@ -30,17 +34,27 @@ rule read =
   | "not" {NOT}
   | "and" {AND}
   | "or" {OR}
+  | "bvadd" {BVADD}
+  | "bvmult" {BVMULT}
+  | "bvor" {BVOR}
+  | "bvxor" {BVXOR}
+  | "bvand" {BVAND}
+  | "bvsub" {BVSUB}
+  | "bvnot" {BVNEG}
   | "+" {PLUS}
   | "*" {TIMES}
   | "-" {MINUS}
   | "=" {EQUALS}
+  | "bv=" {BVEQUALS}
   | "<->" {IFF}
   | "<" {LESS}
+  | "bv<" {BVLESS}
   | "<=" {LESS_EQUALS}
   | ">" {GREATER}
   | ">=" {GREATER_EQUALS}
   | "=>" {IMPLIES}
   | ":=" {ASSIGN}
+  | "bv:=" {BVASSIGN}
   | ";" {SEMICOLON}
   | "," {COMMA}
   | ":" {COLON}

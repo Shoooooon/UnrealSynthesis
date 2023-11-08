@@ -1,0 +1,2 @@
+[Int Start : [x, y, (+ 1 1), (+ Nonterm Start Nonterm Start), (if Nonterm StartBool then Nonterm Start else Nonterm Start)] : Some ([] : (=> (and (= x[1] 0) (= y[1] 0)) (or (= e_t[1] 0) (< 1 e_t[1])))); Bool StartBool : [(not (< Nonterm Start Nonterm Start)), (not (< Nonterm Start Nonterm Start))] : Some ([] : true)] 
+ {|(and (and (and true (= x[1] 0)) (= y[1] 0)) (= z[1] 0))|} Int Nonterm Start {|(not (and true (= e_t[1] 1)))|}

@@ -1,0 +1,23 @@
+;test
+(set-info :smt-lib-version 2.6)
+(set-info :status unsat)
+(set-logic NIA)
+(declare-const k_finitevscpy_1 Int)
+(declare-const k_finitevscpy_2 Int)
+(declare-const k_finitevscpy_3 Int)
+(declare-const k_finitevscpy_4 Int)
+(declare-const x_finitevscpy_1 Int)
+(declare-const x_finitevscpy_2 Int)
+(declare-const x_finitevscpy_3 Int)
+(declare-const x_finitevscpy_4 Int)
+(declare-const y_finitevscpy_1 Int)
+(declare-const y_finitevscpy_2 Int)
+(declare-const y_finitevscpy_3 Int)
+(declare-const y_finitevscpy_4 Int)
+(assert
+(not
+(=> (and (and (and (and (and (and (and (and (and (and (and (and true (= x_finitevscpy_1 (- 1))) (= y_finitevscpy_1 (- 1))) (= k_finitevscpy_1 (- 2))) (= x_finitevscpy_2 0)) (= y_finitevscpy_2 2)) (= k_finitevscpy_2 1)) (= x_finitevscpy_3 (- 1))) (= y_finitevscpy_3 0)) (= k_finitevscpy_3 1)) (= x_finitevscpy_4 (- 2))) (= y_finitevscpy_4 (- 1))) (= k_finitevscpy_4 (- 3))) (not (and (and (and (and true (= k_finitevscpy_1 0)) (= k_finitevscpy_2 2)) (= k_finitevscpy_3 3)) (= k_finitevscpy_4 1))))
+)
+ )
+(check-sat)
+(exit)

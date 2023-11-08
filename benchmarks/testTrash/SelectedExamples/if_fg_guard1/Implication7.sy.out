@@ -1,0 +1,6 @@
+(
+(define-fun fresh10 ((a Int) (b Int) (c Int) (d Int) (fresh3 Int) (fresh4 Int) (fresh5 Int) (fresh6 Int)) Int (+ a fresh6))
+(define-fun fresh7 ((a Int) (b Int) (c Int) (d Int) (fresh3 Int) (fresh4 Int) (fresh5 Int) (fresh6 Int)) Int (+ fresh3 d))
+(define-fun fresh8 ((a Int) (b Int) (c Int) (d Int) (fresh3 Int) (fresh4 Int) (fresh5 Int) (fresh6 Int)) Int (+ c fresh4))
+(define-fun fresh9 ((a Int) (b Int) (c Int) (d Int) (fresh3 Int) (fresh4 Int) (fresh5 Int) (fresh6 Int)) Int (+ b fresh5))
+)

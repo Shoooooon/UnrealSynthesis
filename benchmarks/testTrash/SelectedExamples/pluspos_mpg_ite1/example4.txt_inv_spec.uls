@@ -1,0 +1,10 @@
+[Int NT3 : [(+ Nonterm NT1 Nonterm NT1), (if Nonterm NT4 then Nonterm NT3 else Nonterm NT1), (if Nonterm NT4 then Nonterm NT1 else Nonterm NT3), (if Nonterm NT7 then Nonterm NT1 else Nonterm NT1)] : Some ([] :
+(or (= e_t[1] (+ z[1] z[1])) (or (= e_t[1] (+ z[1] y[1])) (or (= e_t[1] (+ y[1] y[1])) (or (= e_t[1] (+ z[1] x[1])) (or (= e_t[1] (+ y[1] x[1])) (or (= e_t[1] (+ x[1] x[1])) (or (= e_t[1] (+ 1 z[1])) (or (= e_t[1] (+ 1 y[1])) (or (= e_t[1] (+ 1 x[1])) (or (= e_t[1] 2) (or (= e_t[1] z[1]) (or (= e_t[1] y[1]) (or (= e_t[1] x[1]) (or (= e_t[1] 1) (= e_t[1] 0)))))))))))))))
+);
+ Int NT1 : [x, y, 0, z, 1, (if Nonterm NT4 then Nonterm NT1 else Nonterm NT1)] : Some ([] : 
+ (or (= e_t[1] 0) (or (= e_t[1] 1) (or (= e_t[1] x[1]) (or (= e_t[1] y[1]) (= e_t[1] z[1]))
+ ))));
+ Int Start : [Nonterm NT1, Nonterm NT3] : None;
+ Bool NT7 : [(not (< Nonterm NT3 Nonterm NT1)), (and Nonterm NT7 Nonterm NT4)] : Some ([] : true);
+ Bool NT4 : [(not (< Nonterm NT1 Nonterm NT1)), (and Nonterm NT4 Nonterm NT4)] : Some ([] : true)] 
+ {|(and (and (and true (= x[1] 12)) (= y[1] 18)) (= z[1] -15))|} Int Nonterm Start {|(not (and true (= e_t[1] 20)))|}

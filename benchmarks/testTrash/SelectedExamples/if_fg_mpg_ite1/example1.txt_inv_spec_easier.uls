@@ -1,0 +1,16 @@
+[Int NT3 : [(if Nonterm NT2 then Nonterm NT1 else Nonterm NT1)] : None;
+ Int NT1 : [x, y, z, 0, 1, (+ Nonterm NT1 Nonterm NT1)] : Some ([] : 
+ exists ((a Int) (b Int) (c Int) (d Int)) 
+ (and (and (>= a 0) (and (>= b 0) (and (>= c 0) (>= d 0))))
+ (and (= (+ d (+ (* a x[1]) (+ (* b y[1]) (* c z[1])))) e_t[1]) 
+ (and (= (+ d (+ (* a x[2]) (+ (* b y[2]) (* c z[2])))) e_t[2]) 
+ (and (= (+ d (+ (* a x[3]) (+ (* b y[3]) (* c z[3])))) e_t[3]) 
+ (and (= (+ d (+ (* a x[4]) (+ (* b y[4]) (* c z[4])))) e_t[4]) 
+ (and (= (+ d (+ (* a x[5]) (+ (* b y[5]) (* c z[5])))) e_t[5]) 
+ (and (= (+ d (+ (* a x[6]) (+ (* b y[6]) (* c z[6])))) e_t[6]) 
+ (and (= (+ d (+ (* a x[7]) (+ (* b y[7]) (* c z[7])))) e_t[7]) 
+ (= (+ d (+ (* a x[8]) (+ (* b y[8]) (* c z[8])))) e_t[8]))))))))));
+  Int Start : [x, y, z, 0, 1, (+ Nonterm NT1 Nonterm NT1), (if Nonterm NT2 then Nonterm NT1 else Nonterm NT1), (+ Nonterm NT3 Nonterm NT1)] : None;
+   Bool NT2 : [(or (< Nonterm NT1 Nonterm NT1) (= Nonterm NT1 Nonterm NT1)), (not Nonterm NT2), (and Nonterm NT2 Nonterm NT2), (or Nonterm NT2 Nonterm NT2)] : Some ([] : true)] 
+ {|(and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and (and true (= x[1] 0)) (= y[1] 0)) (= z[1] 0)) (= x[2] -3)) (= y[2] -6)) (= z[2] -9)) (= x[3] -1)) (= y[3] 0)) (= z[3] 0)) (= x[4] -1)) (= y[4] 1)) (= z[4] 3)) (= x[5] -1)) (= y[5] 3)) (= z[5] 1)) (= x[6] 1)) (= y[6] -1)) (= z[6] 1)) (= x[7] -3)) (= y[7] 0)) (= z[7] -1)) (= x[8] 0)) (= y[8] 1)) (= z[8] 2))|} Int Nonterm Start 
+ {|(not (and (and (and (and (and (and (and (and true (= e_t[1] 1)) (= e_t[2] 0)) (= e_t[3] 1)) (= e_t[4] 4)) (= e_t[5] 4)) (= e_t[6] 2)) (= e_t[7] 0)) (= e_t[8] 1)))|}

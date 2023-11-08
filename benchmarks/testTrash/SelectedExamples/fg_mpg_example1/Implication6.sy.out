@@ -1,0 +1,5 @@
+(
+(define-fun fresh6 ((a Int) (b Int) (c Int) (fresh3 Int) (fresh4 Int) (fresh5 Int)) Int (+ c fresh3))
+(define-fun fresh7 ((a Int) (b Int) (c Int) (fresh3 Int) (fresh4 Int) (fresh5 Int)) Int (+ b fresh4))
+(define-fun fresh8 ((a Int) (b Int) (c Int) (fresh3 Int) (fresh4 Int) (fresh5 Int)) Int (+ fresh5 a))
+)

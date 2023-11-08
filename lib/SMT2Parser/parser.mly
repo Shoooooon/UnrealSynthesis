@@ -2,10 +2,10 @@
     open Logic
     open Logic.Formula
     open Logic.Variable
-    exception Parse_Bad_ITVar
     exception Parse_Bad_BVar
     exception Parse_Bad_Var
     exception Parse_Bad_Equals_Type_Mismatch
+    exception Type_Mismatch
     let make_exists body quant = Formula.Exists (quant, body)
     let make_forall body quant = Formula.Forall (quant, body)
     let variable_context = (ref [])
@@ -13,15 +13,22 @@
 %}
 
 %token <int> INT
+%token <string> BITV
 %token <string> STRING
 %token DEF_FUN
 %token INT_KWD
+%token BITVEC_KWD
 %token BOOL_KWD
 %token NOT
 %token AND
 %token OR
 %token TRUE
 %token FALSE
+%token BVADD
+%token BVOR
+%token BVAND
+%token BVSUB
+%token BVNEG
 %token PLUS
 %token MINUS
 %token EQUALS
@@ -46,25 +53,40 @@ args_list:
 
 args:
   |LEFT_PAREN s=STRING INT_KWD RIGHT_PAREN {[Variable.IntTermVar (T s)]}
+  |LEFT_PAREN s=STRING BITVEC_KWD RIGHT_PAREN {[Variable.BitvTermVar (T s)]}
   |LEFT_PAREN s=STRING BOOL_KWD RIGHT_PAREN {[Variable.BoolVar (B s)]}
   |LEFT_PAREN s=STRING INT_KWD RIGHT_PAREN args=args {List.cons (Variable.IntTermVar (T s)) args}
+  |LEFT_PAREN s=STRING BITVEC_KWD RIGHT_PAREN args=args {List.cons (Variable.BitvTermVar (T s)) args}
   |LEFT_PAREN s=STRING BOOL_KWD RIGHT_PAREN args=args {List.cons (Variable.BoolVar (B s)) args}
 
 term:
-  | t=int_term {ITerm t}
+  | i = INT {ITerm (Int i)}
+  | s = STRING {(*WARNING: e_t case bad -- may want separate et names by type*)
+  if s = "e_t" then ITerm (ITVar ET) else (if (List.mem (Variable.IntTermVar (T s)) !variable_context) then ITerm (ITVar (T s)) 
+  (* else (if (List.mem (Variable.BitvTermVar (T s)) !variable_context) then BitvTerm (BitvTVar (T s)) *)
+  else raise Parse_Bad_BVar)}
+  | LEFT_PAREN MINUS t=term RIGHT_PAREN {match t with | ITerm n -> ITerm (Formula.Minus n) | _ -> raise Type_Mismatch}
+  | LEFT_PAREN PLUS t1=term t2=term RIGHT_PAREN {match (t1, t2) with | ITerm n1, ITerm n2 -> ITerm (Formula.Plus (n1, n2)) | _ -> raise Type_Mismatch}
+  // | btv = BITV {BitvTerm (Bitv btv)}
+  // | LEFT_PAREN BVNEG t=term RIGHT_PAREN {match t with | BitvTerm btv -> BitvTerm (Formula.BitvUnarApp (Minus, btv)) | _ -> raise Type_Mismatch}
+  // | LEFT_PAREN BVADD t1=term t2=term RIGHT_PAREN {match (t1, t2) with | BitvTerm btv1, BitvTerm btv2 -> BitvTerm (Formula.BitvBinarApp (Plus, btv1, btv2)) | _ -> raise Type_Mismatch}
+  // | LEFT_PAREN BVSUB t1=term t2=term RIGHT_PAREN {match (t1, t2) with | BitvTerm btv1, BitvTerm btv2 -> BitvTerm (Formula.BitvBinarApp (Sub, btv1, btv2)) | _ -> raise Type_Mismatch}
+  // | LEFT_PAREN BVOR t1=term t2=term RIGHT_PAREN {match (t1, t2) with | BitvTerm btv1, BitvTerm btv2 -> BitvTerm (Formula.BitvBinarApp (Or, btv1, btv2)) | _ -> raise Type_Mismatch}
+  // | LEFT_PAREN BVAND t1=term t2=term RIGHT_PAREN {match (t1, t2) with | BitvTerm btv1, BitvTerm btv2 -> BitvTerm (Formula.BitvBinarApp (And, btv1, btv2)) | _ -> raise Type_Mismatch}
 
-int_term:
-  | i = INT {Int i}
-  | s = STRING {if s = "e_t" then (ITVar ET) else (if (List.mem (Variable.IntTermVar (T s)) !variable_context) then (ITVar (T s)) else raise Parse_Bad_ITVar)}
-  | LEFT_PAREN MINUS t=int_term RIGHT_PAREN {Formula.Minus t}
-  | LEFT_PAREN PLUS t1=int_term t2=int_term RIGHT_PAREN {Formula.Plus (t1, t2)}
+
+form_list :
+  | f=form {[f]}
+  | f=form f_list=form_list {List.cons f f_list}
 
 form:
   | TRUE {True}
   | FALSE {False}
   | s = STRING {if s = "b_t" then (BVar BT) else (if (List.mem (Variable.BoolVar (B s)) !variable_context) then (BVar (B s)) else raise Parse_Bad_BVar)}
-  | LEFT_PAREN AND f1=form f2=form RIGHT_PAREN {And (f1, f2)}
-  | LEFT_PAREN OR f1=form f2=form RIGHT_PAREN {Or (f1, f2)}
+  | LEFT_PAREN AND flist=form_list RIGHT_PAREN {
+    List.fold_left (fun conjunction conjunct -> And(conjunction, conjunct)) (List.hd flist) (List.tl flist)}
+  | LEFT_PAREN OR flist=form_list RIGHT_PAREN {
+    List.fold_left (fun disjunction disjunct -> Or(disjunction, disjunct)) (List.hd flist) (List.tl flist)}
   | LEFT_PAREN NOT f=form RIGHT_PAREN {Not f}
   | LEFT_PAREN IMPLIES f1=form f2=form RIGHT_PAREN {Implies (f1, f2)}
   | LEFT_PAREN EQUALS e1=exp e2=exp RIGHT_PAREN {
@@ -81,8 +103,14 @@ form:
   
 exp:
   | i = INT {Term (ITerm (Int i))}
-  | LEFT_PAREN MINUS t=int_term RIGHT_PAREN {Term (ITerm (Formula.Minus t))}
-  | LEFT_PAREN PLUS t1=int_term t2=int_term RIGHT_PAREN {Term (ITerm (Formula.Plus (t1, t2)))}
+  | LEFT_PAREN MINUS t=term RIGHT_PAREN {match t with | ITerm n -> Term (ITerm (Formula.Minus n)) | _ -> raise Type_Mismatch}
+  | LEFT_PAREN PLUS t1=term t2=term RIGHT_PAREN {match (t1, t2) with | ITerm n1, ITerm n2 -> Term (ITerm (Formula.Plus (n1, n2))) | _ -> raise Type_Mismatch}
+  | btv = BITV {Term (BitvTerm (Bitv btv))}
+  | LEFT_PAREN BVNEG t=term RIGHT_PAREN {match t with | BitvTerm btv -> Term (BitvTerm (Formula.BitvUnarApp (Minus, btv))) | _ -> raise Type_Mismatch}
+  | LEFT_PAREN BVADD t1=term t2=term RIGHT_PAREN {match (t1, t2) with | BitvTerm btv1, BitvTerm btv2 -> Term (BitvTerm (Formula.BitvBinarApp (Plus, btv1, btv2))) | _ -> raise Type_Mismatch}
+  | LEFT_PAREN BVSUB t1=term t2=term RIGHT_PAREN {match (t1, t2) with | BitvTerm btv1, BitvTerm btv2 -> Term (BitvTerm (Formula.BitvBinarApp (Sub, btv1, btv2))) | _ -> raise Type_Mismatch}
+  | LEFT_PAREN BVOR t1=term t2=term RIGHT_PAREN {match (t1, t2) with | BitvTerm btv1, BitvTerm btv2 -> Term (BitvTerm (Formula.BitvBinarApp (Or, btv1, btv2))) | _ -> raise Type_Mismatch}
+  | LEFT_PAREN BVAND t1=term t2=term RIGHT_PAREN {match (t1, t2) with | BitvTerm btv1, BitvTerm btv2 -> Term (BitvTerm (Formula.BitvBinarApp (And, btv1, btv2))) | _ -> raise Type_Mismatch}
   | TRUE {Boolean True}
   | FALSE {Boolean False}
   | LEFT_PAREN AND f1=form f2=form RIGHT_PAREN {Boolean (And (f1, f2))}
@@ -100,9 +128,11 @@ exp:
   | LEFT_PAREN GREATER_EQUALS t1=term t2=term RIGHT_PAREN {Boolean (Or (Less (t2, t1), Equals (t2, t1)))}
   | EXISTS quants=args_list body=form {popper (List.length quants); Boolean (List.fold_left make_exists body quants)} 
   | FORALL quants=args_list body=form {popper (List.length quants); Boolean (List.fold_left make_forall body quants)} 
-  | s = STRING {if s = "e_t" then Term (ITerm (ITVar ET)) 
+  | s = STRING {(*WARNING: e_t case bad -- may want separate et names by type*)
+    if s = "e_t" then Term (ITerm (ITVar ET)) 
   else if s = "b_t" then Boolean (BVar BT)
   else if (List.mem (BoolVar (B s)) !variable_context) then Boolean (BVar (B s)) 
   else if (List.mem (IntTermVar (T s)) !variable_context) then Term (ITerm (ITVar (T s)))
+  else if (List.mem (BitvTermVar (T s)) !variable_context) then Term (BitvTerm (BitvTVar (T s)))
   else raise Parse_Bad_Var}
   

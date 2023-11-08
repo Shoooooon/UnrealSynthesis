@@ -1,17 +1,15 @@
 type bitv_term_array_var = ET | T of string
 type bitv_term_var = ET | T of string
-
 type int_term_array_var = ET | T of string
 type int_term_var = ET | T of string
-
 type bool_array_var = BT | B of string
 type bool_var = BT | B of string
 
 type variable =
   | BoolVar of bool_var
   | IntTermVar of int_term_var
-  (* | IntTermVar of bitv_term_var
-  | AIntTermVar of bitv_array_var *)
+  | BitvTermVar of bitv_term_var
+  | ABitvTermVar of bitv_term_array_var
   | ABoolVar of bool_array_var
   | AIntTermVar of int_term_array_var
 
@@ -29,12 +27,15 @@ module VMap_AIT = Map.Make (struct
 end)
 
 module VMap_ABitvT = Map.Make (struct
-  type t = int_term_array_var
+  type t = bitv_term_array_var
 
   let compare = compare
 end)
 
-type vmaps = {int_map : int_term_array_var VMap_AIT.t; bitv_map : int_term_array_var VMap_ABitvT.t}
+type vmaps = {
+  int_map : int_term_array_var VMap_AIT.t;
+  bitv_map : bitv_term_array_var VMap_ABitvT.t;
+}
 
 module VMap_AB = Map.Make (struct
   type t = bool_array_var
@@ -52,6 +53,10 @@ let var_tostr var =
   | IntTermVar (T t) -> t
   | AIntTermVar ET -> "e_t"
   | AIntTermVar (T t) -> t
+  | BitvTermVar ET -> "e_t"
+  | BitvTermVar (T t) -> t
+  | ABitvTermVar ET -> "e_t"
+  | ABitvTermVar (T t) -> t
 
 let subs_var current_var to_replace expression =
   let repl =
@@ -64,6 +69,10 @@ let subs_var current_var to_replace expression =
     | IntTermVar (T t) -> to_replace = t
     | AIntTermVar ET -> to_replace = "e_t"
     | AIntTermVar (T t) -> to_replace = t
+    | BitvTermVar ET -> to_replace = "e_t"
+    | BitvTermVar (T t) -> to_replace = t
+    | ABitvTermVar ET -> to_replace = "e_t"
+    | ABitvTermVar (T t) -> to_replace = t
   in
   if repl then expression else current_var
 
@@ -74,6 +83,8 @@ let new_var_of_same_type var1 newvar_name =
   | ABoolVar _ -> ABoolVar (B newvar_name)
   | IntTermVar _ -> IntTermVar (T newvar_name)
   | AIntTermVar _ -> AIntTermVar (T newvar_name)
+  | BitvTermVar _ -> BitvTermVar (T newvar_name)
+  | ABitvTermVar _ -> ABitvTermVar (T newvar_name)
 
 (* let match_var var1 name =
    match current_var with

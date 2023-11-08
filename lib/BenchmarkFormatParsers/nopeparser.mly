@@ -73,7 +73,7 @@ prog:
       | _ -> raise Bad) tvl) )
       in
       let strongest_maker nterm_prog =
-        lazy (let name = (match nterm_prog with | Numeric (NNTerm n) -> (Programs.NonTerminal.name n) | Boolean (BNTerm b) -> (Programs.NonTerminal.name b) | Stmt (SNTerm s) -> (Programs.NonTerminal.name s) | _ -> raise Bad) in
+        lazy (let name = (match nterm_prog with | Term (Numeric (NNTerm n)) -> (Programs.NonTerminal.name n) | Boolean (BNTerm b) -> (Programs.NonTerminal.name b) | Stmt (SNTerm s) -> (Programs.NonTerminal.name s) | _ -> raise Bad) in
         let reassigned_vars = reassigned_vars_clean nterm_prog in
         let reassigned_pairs = (List.filter (fun (x, _) -> (VS.mem x (reassigned_vars))) pairs) 
         in
@@ -82,7 +82,7 @@ prog:
         and program_vars = (get_program_vars nterm_prog) in
         Some (reassigned_pairs, 
         BHole ((Printf.sprintf "hole_%s" name), 
-        (List.map (fun x -> match x with IntTermVar ET -> (Term (ITerm (AITVar (ITUnApp ET)))) 
+        (List.map (fun x -> match x with IntTermVar ET -> (Logic.Formula.Term (ITerm (AITVar (ITUnApp ET)))) 
           | IntTermVar (T t) -> (Term (ITerm (AITVar (ITUnApp (T t))))) 
           | BoolVar BT -> (Boolean (ABVar (BUnApp BT)))
           | BoolVar (B b) -> (Boolean (ABVar (BUnApp (B b))))
@@ -90,7 +90,7 @@ prog:
          (VS.elements (VS.remove (ABoolVar (B "b_t_cpy")) (VS.remove (AIntTermVar (T "e_t_cpy")) (VS.union program_vars reassigned_vars_and_copies))))
          )))) 
       in
-        (Numeric ((fun gram -> (if (List.exists (fun n -> (Programs.NonTerminal.name n)= "Start") (Lazy.force gram).grammar_num)
+        Term (Numeric ((fun gram -> (if (List.exists (fun n -> (Programs.NonTerminal.name n)= "Start") (Lazy.force gram).grammar_num)
     then (NNTerm (List.find (fun n -> (Programs.NonTerminal.name n) = "Start") (Lazy.force gram).grammar_num)) 
     else (raise Bad))) (grammar strongest_maker))))
     }
@@ -113,8 +113,9 @@ grammar:
       let rec grammar =  lazy {
           grammar_num = (List.filter_map (fun nterm_dummy -> 
       (match nterm_dummy with 
-        | Numeric (NNTerm n) -> Some {Programs.NonTerminal.name=n.name; expansions=lazy (List.map (subs_nonterms_numeric grammar) (Lazy.force n.expansions)); strongest=(strongest_maker (Numeric (NNTerm { Programs.NonTerminal.name = n.name; expansions=lazy (List.map (subs_nonterms_numeric grammar) (Lazy.force n.expansions)); strongest = lazy None})))}
+        | Term (Numeric (NNTerm n)) -> Some {Programs.NonTerminal.name=n.name; expansions=lazy (List.map (subs_nonterms_numeric grammar) (Lazy.force n.expansions)); strongest=(strongest_maker (Term (Numeric (NNTerm { Programs.NonTerminal.name = n.name; expansions=lazy (List.map (subs_nonterms_numeric grammar) (Lazy.force n.expansions)); strongest = lazy None}))))}
         | _ -> None)) (nt_list (grammar)));
+        grammar_bitv = [];
         grammar_bool = (List.filter_map (fun nterm_dummy -> 
       (match nterm_dummy with 
         | Boolean (BNTerm b) -> Some {Programs.NonTerminal.name=b.name; expansions=lazy (List.map (subs_nonterms_boolean grammar) (Lazy.force b.expansions)); strongest=(strongest_maker (Boolean (BNTerm { Programs.NonTerminal.name = b.name; expansions=lazy (List.map (subs_nonterms_boolean grammar) (Lazy.force b.expansions)); strongest = lazy None})))}
@@ -129,7 +130,7 @@ nonterminal_defs:
   | n=nonterminal_def n_list=nonterminal_defs {fun gram -> List.cons (n gram) (n_list gram)}
 
 nonterminal_def:
-  | LEFT_PAREN name_str=STRING INT_KWD LEFT_PAREN expansions=prog_nums RIGHT_PAREN RIGHT_PAREN {fun gram -> Numeric (NNTerm { name = name_str; expansions = lazy (expansions gram); strongest = lazy None;})}
+  | LEFT_PAREN name_str=STRING INT_KWD LEFT_PAREN expansions=prog_nums RIGHT_PAREN RIGHT_PAREN {fun gram -> Term (Numeric (NNTerm { name = name_str; expansions = lazy (expansions gram); strongest = lazy None;}))}
   | LEFT_PAREN name_str=STRING BOOL_KWD LEFT_PAREN expansions=prog_bools RIGHT_PAREN RIGHT_PAREN {fun gram -> Boolean (BNTerm { name = name_str; expansions = lazy (expansions gram); strongest = lazy None;})}
   
 prog_bools:
@@ -152,17 +153,20 @@ prog_num:
     else (Var s))
     }
 
+prog_term:
+  | n=prog_num {fun gram -> Numeric (n gram)}
+
 prog_bool:
  | TRUE {fun _ ->True}
  | FALSE {fun _ -> False}
  | LEFT_PAREN NOT b=prog_bool RIGHT_PAREN {fun gram -> Not (b gram)}
  | LEFT_PAREN OR b1=prog_bool b2=prog_bool RIGHT_PAREN {fun gram -> Or ((b1 gram), (b2 gram))}
  | LEFT_PAREN AND b1=prog_bool b2=prog_bool RIGHT_PAREN {fun gram -> And ((b1 gram), (b2 gram))}
- | LEFT_PAREN EQUALS n1=prog_num n2=prog_num RIGHT_PAREN {fun gram -> Equals ((n1 gram), (n2 gram))}
- | LEFT_PAREN LESS n1=prog_num n2=prog_num RIGHT_PAREN {fun gram -> Less ((n1 gram), (n2 gram))}
- | LEFT_PAREN LESS_EQUALS n1=prog_num n2=prog_num RIGHT_PAREN {fun gram -> Or (Less ((n1 gram), (n2 gram)), Equals ((n1 gram), (n2 gram)))}
- | LEFT_PAREN GREATER n1=prog_num n2=prog_num RIGHT_PAREN {fun gram -> Not (Less ((n1 gram), (n2 gram)))}
- | LEFT_PAREN GREATER_EQUALS n1=prog_num n2=prog_num RIGHT_PAREN {fun gram -> Not (Less ((n1 gram), (n2 gram)))}
+ | LEFT_PAREN EQUALS n1=prog_term n2=prog_term RIGHT_PAREN {fun gram -> Equals ((n1 gram), (n2 gram))}
+ | LEFT_PAREN LESS n1=prog_term n2=prog_term RIGHT_PAREN {fun gram -> Less ((n1 gram), (n2 gram))}
+ | LEFT_PAREN LESS_EQUALS n1=prog_term n2=prog_term RIGHT_PAREN {fun gram -> Or (Less ((n1 gram), (n2 gram)), Equals ((n1 gram), (n2 gram)))}
+ | LEFT_PAREN GREATER n1=prog_term n2=prog_term RIGHT_PAREN {fun gram -> Not (Less ((n1 gram), (n2 gram)))}
+ | LEFT_PAREN GREATER_EQUALS n1=prog_term n2=prog_term RIGHT_PAREN {fun gram -> Not (Less ((n1 gram), (n2 gram)))}
  | s = STRING {fun gram -> (if (List.exists (fun b -> (Programs.NonTerminal.name b) = s) (Lazy.force gram).grammar_bool)
     then BNTerm (List.find (fun b -> (Programs.NonTerminal.name b) = s) (Lazy.force gram).grammar_bool)
     else BNTerm ({name=s; expansions=lazy []; strongest=lazy None}))

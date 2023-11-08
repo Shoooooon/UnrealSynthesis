@@ -1,0 +1,17 @@
+[Int NT3 : [(+ Nonterm NT1 Nonterm NT1), (if Nonterm NT4 then Nonterm NT3 else Nonterm NT1), (if Nonterm NT4 then Nonterm NT1 else Nonterm NT3), (if Nonterm NT7 then Nonterm NT1 else Nonterm NT1)] : Some ([] : 
+(and (or (= e_t[1] (+ k[1] k[1])) (or (= e_t[1] (+ k[1] y[1])) (or (= e_t[1] (+ y[1] y[1])) (or (= e_t[1] (+ k[1] x[1])) (or (= e_t[1] (+ y[1] x[1])) (or (= e_t[1] (+ x[1] x[1])) (or (= e_t[1] (+ 1 k[1])) (or (= e_t[1] (+ 1 y[1])) (or (= e_t[1] (+ 1 x[1])) (or (= e_t[1] 2) (or (= e_t[1] k[1]) (or (= e_t[1] y[1]) (or (= e_t[1] x[1]) (or (= e_t[1] 1) (= e_t[1] 0)))))))))))))))
+(and (or (= e_t[2] (+ k[2] k[2])) (or (= e_t[2] (+ k[2] y[2])) (or (= e_t[2] (+ y[2] y[2])) (or (= e_t[2] (+ k[2] x[2])) (or (= e_t[2] (+ y[2] x[2])) (or (= e_t[2] (+ x[2] x[2])) (or (= e_t[2] (+ 1 k[2])) (or (= e_t[2] (+ 1 y[2])) (or (= e_t[2] (+ 1 x[2])) (or (= e_t[2] 2) (or (= e_t[2] k[2]) (or (= e_t[2] y[2]) (or (= e_t[2] x[2]) (or (= e_t[2] 1) (= e_t[2] 0)))))))))))))))
+(and (or (= e_t[3] (+ k[3] k[3])) (or (= e_t[3] (+ k[3] y[3])) (or (= e_t[3] (+ y[3] y[3])) (or (= e_t[3] (+ k[3] x[3])) (or (= e_t[3] (+ y[3] x[3])) (or (= e_t[3] (+ x[3] x[3])) (or (= e_t[3] (+ 1 k[3])) (or (= e_t[3] (+ 1 y[3])) (or (= e_t[3] (+ 1 x[3])) (or (= e_t[3] 2) (or (= e_t[3] k[3]) (or (= e_t[3] y[3]) (or (= e_t[3] x[3]) (or (= e_t[3] 1) (= e_t[3] 0)))))))))))))))
+(or (= e_t[4] (+ k[4] k[4])) (or (= e_t[4] (+ k[4] y[4])) (or (= e_t[4] (+ y[4] y[4])) (or (= e_t[4] (+ k[4] x[4])) (or (= e_t[4] (+ y[4] x[4])) (or (= e_t[4] (+ x[4] x[4])) (or (= e_t[4] (+ 1 k[4])) (or (= e_t[4] (+ 1 y[4])) (or (= e_t[4] (+ 1 x[4])) (or (= e_t[4] 2) (or (= e_t[4] k[4]) (or (= e_t[4] y[4]) (or (= e_t[4] x[4]) (or (= e_t[4] 1) (= e_t[4] 0)))))))))))))))
+)))
+);
+ Int NT1 : [x, y, 0, k, 1, (if Nonterm NT4 then Nonterm NT1 else Nonterm NT1)] : Some ([] : 
+ (and (or (= e_t[1] 0) (or (= e_t[1] 1) (or (= e_t[1] x[1]) (or (= e_t[1] y[1]) (= e_t[1] k[1])))))
+ (and (or (= e_t[2] 0) (or (= e_t[2] 1) (or (= e_t[2] x[2]) (or (= e_t[2] y[2]) (= e_t[2] k[2])))))
+ (and (or (= e_t[3] 0) (or (= e_t[3] 1) (or (= e_t[3] x[3]) (or (= e_t[3] y[3]) (= e_t[3] k[3])))))
+ (or (= e_t[4] 0) (or (= e_t[4] 1) (or (= e_t[4] x[4]) (or (= e_t[4] y[4]) (= e_t[4] k[4])))))
+ ))));
+ Int Start : [x, y, 0, k, 1, (if Nonterm NT4 then Nonterm NT1 else Nonterm NT1), (+ Nonterm NT1 Nonterm NT1), (if Nonterm NT4 then Nonterm NT3 else Nonterm NT1), (if Nonterm NT4 then Nonterm NT1 else Nonterm NT3), (if Nonterm NT7 then Nonterm NT1 else Nonterm NT1)] : None;
+ Bool NT7 : [(not (< Nonterm NT3 Nonterm NT1)), (not (< Nonterm NT3 Nonterm NT1))] : None;
+ Bool NT4 : [(not (< Nonterm NT1 Nonterm NT1)), (not (< Nonterm NT1 Nonterm NT1))] : None] 
+ {|(and (and (and (and (and (and (and (and (and (and (and (and true (= x[1] -1)) (= y[1] -1)) (= k[1] -2)) (= x[2] 0)) (= y[2] 2)) (= k[2] 1)) (= x[3] -1)) (= y[3] 0)) (= k[3] 1)) (= x[4] -2)) (= y[4] -1)) (= k[4] -3))|} Int Nonterm Start {|(not (and (and (and (and true (= e_t[1] 0)) (= e_t[2] 2)) (= e_t[3] 3)) (= e_t[4] 1)))|}

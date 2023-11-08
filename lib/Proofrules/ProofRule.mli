@@ -1,6 +1,8 @@
 open Logic.Formula
 open Programs.Program
 
+exception Proof_Contents_Mismatch
+
 (* Represents a complete UL triple *)
 type triple = { pre : formula; prog : program; post : formula }
 
@@ -24,11 +26,13 @@ type contextualized_triple_no_pre = {
 
 (* Represents a UL Proof *)
 type ruleApp =
-  | Int of contextualized_triple
+  | Const of contextualized_triple
   | True of contextualized_triple
   | False of contextualized_triple
   | Var of contextualized_triple
   | Not of contextualized_triple * ruleApp
+  | UnApp of contextualized_triple * ruleApp
+  | BinApp of contextualized_triple * ruleApp * ruleApp
   | Plus of contextualized_triple * ruleApp * ruleApp
   | Or of contextualized_triple * ruleApp * ruleApp
   | And of contextualized_triple * ruleApp * ruleApp
@@ -55,4 +59,7 @@ val get_conclusion : ruleApp -> contextualized_triple
 
 (* Given a proof and a list of ways to fill holes, fills the holes accordingly.*)
 val plug_holes :
-  ruleApp -> ((string * Logic.Variable.variable list) * formula) list -> ruleApp
+  ruleApp ->
+  int ->
+  ((string * Logic.Variable.variable list) * formula) list ->
+  ruleApp

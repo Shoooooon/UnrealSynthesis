@@ -1,0 +1,19 @@
+[Int NT4 : [(if Nonterm NT3 then Nonterm NT1 else Nonterm NT1), (+ Nonterm NT4 Nonterm NT1)] : Some ([] : exists ((a1 Int) (b1 Int) (c1 Int) (d1 Int) (a2 Int) (b2 Int) (c2 Int) (d2 Int)) 
+(and (and (>= a1 0) (and (>= b1 0) (and (>= c1 0) (>= d1 0))))
+(and (and (>= a2 0) (and (>= b2 0) (and (>= c2 0) (>= d2 0))))
+(and (or (= (+ d1 (+ (* a1 x[1]) (+ (* b1 y[1]) (* c1 z[1])))) e_t[1]) (= (+ d2 (+ (* a2 x[1]) (+ (* b2 y[1]) (* c2 z[1])))) e_t[1])) 
+(and (or (= (+ d1 (+ (* a1 x[2]) (+ (* b1 y[2]) (* c1 z[2])))) e_t[2]) (= (+ d2 (+ (* a2 x[2]) (+ (* b2 y[2]) (* c2 z[2])))) e_t[2])) 
+(and (or (= (+ d1 (+ (* a1 x[3]) (+ (* b1 y[3]) (* c1 z[3])))) e_t[3]) (= (+ d2 (+ (* a2 x[3]) (+ (* b2 y[3]) (* c2 z[3])))) e_t[3])) 
+(and (or (= (+ d1 (+ (* a1 x[4]) (+ (* b1 y[4]) (* c1 z[4])))) e_t[4]) (= (+ d2 (+ (* a2 x[4]) (+ (* b2 y[4]) (* c2 z[4])))) e_t[4])) 
+(or (= (+ d1 (+ (* a1 x[5]) (+ (* b1 y[5]) (* c1 z[5])))) e_t[5]) (= (+ d2 (+ (* a2 x[5]) (+ (* b2 y[5]) (* c2 z[5])))) e_t[5])) )))))));
+
+ Int NT1 : [x, y, 0, 1, z, (+ Nonterm NT1 Nonterm NT1)] : Some ([] : exists ((a Int) (b Int) (c Int) (d Int)) 
+ (and (and (>= a 0) (and (>= b 0) (and (>= c 0) (>= d 0))))
+ (and (= (+ d (+ (* a x[1]) (+ (* b y[1]) (* c z[1])))) e_t[1]) 
+ (and (= (+ d (+ (* a x[2]) (+ (* b y[2]) (* c z[2])))) e_t[2]) 
+ (and (= (+ d (+ (* a x[3]) (+ (* b y[3]) (* c z[3])))) e_t[3]) 
+ (and (= (+ d (+ (* a x[4]) (+ (* b y[4]) (* c z[4])))) e_t[4]) 
+ (= (+ d (+ (* a x[5]) (+ (* b y[5]) (* c z[5])))) e_t[5])))))));
+ Int Start : [x, y, 0, 1, z, (+ Nonterm NT1 Nonterm NT1), (if Nonterm NT3 then Nonterm NT1 else Nonterm NT1), (+ Nonterm NT4 Nonterm NT1)] : None;
+ Bool NT3 : [(not (< Nonterm NT1 Nonterm NT1)), (not (< Nonterm NT1 Nonterm NT1))] : None] 
+ {|(and (and (and (and (and (and (and (and (and (and (and (and (and (and (and true (= x[1] -1)) (= y[1] 1)) (= z[1] 0)) (= x[2] -2)) (= y[2] 0)) (= z[2] -1)) (= x[3] 0)) (= y[3] 1)) (= z[3] -1)) (= x[4] -1)) (= y[4] 0)) (= z[4] 1)) (= x[5] 1)) (= y[5] 2)) (= z[5] 3))|} Int Nonterm Start {|(not (and (and (and (and (and true (= e_t[1] 1)) (= e_t[2] 1)) (= e_t[3] 0)) (= e_t[4] 2)) (= e_t[5] 2)))|}
