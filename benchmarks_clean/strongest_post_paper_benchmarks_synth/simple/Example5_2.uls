@@ -1,0 +1,4 @@
+[Int E : [x, y, (+ Nonterm E Nonterm E), (+ Nonterm E (- Nonterm E))] : Some ([] : (Hole : holeE [Int x, Int y, Int e_t]) );
+      Stmt S : [(:= x Nonterm E), (:= y Nonterm E), (; Nonterm S Nonterm S)] : Some ([(Int x, Int x_2); (Int y, Int y_2)] : (Hole : holeStart [Int x, Int x_2, Int y, Int y_2]) )]
+              {|(and (= x 2) (= y 0))|} Stmt (while (< Nonterm E Nonterm E) {|(Hole : holeW [Int x, Int y])|} Nonterm S) {|(not (= y 3))|}
+            

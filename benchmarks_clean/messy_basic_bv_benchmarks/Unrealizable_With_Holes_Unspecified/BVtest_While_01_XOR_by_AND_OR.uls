@@ -1,0 +1,5 @@
+[Bool B : [(bv< Nonterm E Nonterm E)] : None;
+  Bitvec E : [x, y, (bvor Nonterm E Nonterm E), (bvand Nonterm E Nonterm E)] : Some ([(ABitvec e_t, ABitvec e_t_2)] : (Hole : ehole [ABitvec e_t, ABitvec x, ABitvec y]));
+  Stmt S : [(bv:= x Nonterm E), (bv:= y Nonterm E), (; Nonterm S Nonterm S)] : Some ([(ABitvec x, ABitvec x_2);(ABitvec y, ABitvec y_2)] : (Hole : shole [ABitvec x, ABitvec y, ABitvec x_2, ABitvec y_2]));
+  Stmt Start : [(while Nonterm B {|true|} Nonterm S) ] : None]
+    {|(and (bv= x[3] #x0000000e) (and (bv= y[3] #x0000000f) (and (bv= x[2] #x000000f7) (and (bv= y[2] #x0000002c) (and (bv= x[1] #x00000006) (bv= y[1] #x00000009))))))|} Stmt Nonterm S {|(not (and (bv= x[1] #x0000000f) (and (bv= x[2] #x000000db) (bv= x[3] #x00000001) )))|}

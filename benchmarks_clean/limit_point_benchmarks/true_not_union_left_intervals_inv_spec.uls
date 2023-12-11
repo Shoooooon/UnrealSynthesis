@@ -1,0 +1,4 @@
+[Bool B : [false, (or Nonterm B (< x Nonterm N))] : Some ([(AInt e_t, AInt e_t_2); (ABool b_t, ABool b_t_2)] : exists ((n Int)) forall ((i Int)) (=> b_t[i] (< x[i] n)));
+        Int N : [0, (+ 1 Nonterm N)] : Some ([(AInt e_t, AInt e_t_2)] : exists ((n Int)) forall ((i Int)) (= e_t[i] n))]
+      {|forall ((i Int)) (= x[i] i)|} Bool Nonterm B {|exists ((i Int)) (not b_t[i])|}
+      

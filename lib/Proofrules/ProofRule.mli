@@ -29,11 +29,13 @@ type ruleApp =
   | Const of contextualized_triple
   | True of contextualized_triple
   | False of contextualized_triple
+  | Skip of contextualized_triple
   | Var of contextualized_triple
   | Not of contextualized_triple * ruleApp
   | UnApp of contextualized_triple * ruleApp
   | BinApp of contextualized_triple * ruleApp * ruleApp
   | Plus of contextualized_triple * ruleApp * ruleApp
+  | UnaryMinus of contextualized_triple * ruleApp
   | Or of contextualized_triple * ruleApp * ruleApp
   | And of contextualized_triple * ruleApp * ruleApp
   | Equals of contextualized_triple * ruleApp * ruleApp

@@ -1,2 +1,0 @@
-[Int Start : [x1, x2, 0, 1, (+ Nonterm Start Nonterm Start)] : Some ([] : (Hole: hole_Start [AInt e_t, AInt x1, AInt x2]))] 
- {|(and (and (and (and (and (and true (= x1[1] -1)) (= x2[1] 0)) (= x1[2] 0)) (= x2[2] -1)) (= x1[3] 16)) (= x2[3] 0))|} Int Nonterm Start {|(not (and (and (and true (= e_t[1] 0)) (= e_t[2] 0)) (= e_t[3] 16)))|}

@@ -18,11 +18,13 @@ type ruleApp =
   | Const of contextualized_triple
   | True of contextualized_triple
   | False of contextualized_triple
+  | Skip of contextualized_triple
   | Var of contextualized_triple
   | Not of contextualized_triple * ruleApp
   | UnApp of contextualized_triple * ruleApp
   | BinApp of contextualized_triple * ruleApp * ruleApp
   | Plus of contextualized_triple * ruleApp * ruleApp
+  | UnaryMinus of contextualized_triple * ruleApp
   | Or of contextualized_triple * ruleApp * ruleApp
   | And of contextualized_triple * ruleApp * ruleApp
   | Equals of contextualized_triple * ruleApp * ruleApp
@@ -68,11 +70,13 @@ let get_conclusion rule =
   | Const ctrip -> ctrip
   | True ctrip -> ctrip
   | False ctrip -> ctrip
+  | Skip ctrip -> ctrip
   | Var ctrip -> ctrip
   | Not (ctrip, _) -> ctrip
   | UnApp (ctrip, _) -> ctrip
   | BinApp (ctrip, _, _) -> ctrip
   | Plus (ctrip, _, _) -> ctrip
+  | UnaryMinus (ctrip, _) -> ctrip
   | And (ctrip, _, _) -> ctrip
   | Or (ctrip, _, _) -> ctrip
   | Equals (ctrip, _, _) -> ctrip
@@ -96,6 +100,7 @@ let rec ruleApp_tostr rule =
       | _ -> raise Proof_Contents_Mismatch)
   | True ctrip -> Printf.sprintf "True: -> %s" (ctrip_tostr ctrip)
   | False ctrip -> Printf.sprintf "False: -> %s" (ctrip_tostr ctrip)
+  | Skip ctrip -> Printf.sprintf "Skip: -> %s" (ctrip_tostr ctrip)
   | Var ctrip -> Printf.sprintf "Var: -> %s" (ctrip_tostr ctrip)
   | UnApp (conc, pf) -> (
       match conc.trip.prog with
@@ -152,6 +157,10 @@ let rec ruleApp_tostr rule =
         (ruleApp_tostr rpf)
         (ctrip_tostr (get_conclusion lpf))
         (ctrip_tostr (get_conclusion rpf))
+        (ctrip_tostr conc)
+  | UnaryMinus (conc, pf) ->
+      Printf.sprintf "%s\nPlus: %s -> %s" (ruleApp_tostr pf)
+        (ctrip_tostr (get_conclusion pf))
         (ctrip_tostr conc)
   | And (conc, lpf, rpf) ->
       Printf.sprintf "%s\n%s\nAnd: %s, %s -> %s" (ruleApp_tostr lpf)
@@ -228,11 +237,13 @@ let rec is_correct rule =
   | Const _ -> true
   | True _ -> true
   | False _ -> true
+  | Skip _ -> true
   | Var _ -> true
   | UnApp (_, pf) -> is_correct pf
   | BinApp (_, lpf, rpf) -> is_correct lpf && is_correct rpf
   | Not (_, pf) -> is_correct pf
   | Plus (_, lpf, rpf) -> is_correct lpf && is_correct rpf
+  | UnaryMinus (_, pf) -> is_correct pf
   | And (_, lpf, rpf) -> is_correct lpf && is_correct rpf
   | Or (_, lpf, rpf) -> is_correct lpf && is_correct rpf
   | Equals (_, lpf, rpf) -> is_correct lpf && is_correct rpf
@@ -251,32 +262,42 @@ let rec is_correct rule =
 
 (* Substitutes holes for formulae. *)
 
-
 let plug_holes_trip (trip : triple) (length : int)
     (hole_map : ((string * variable list) * formula) list) =
   match trip.prog with
   | Term (Numeric (NNTerm n)) ->
       {
         pre = sub_holes (bool_finite_vs_transformer length trip.pre) hole_map;
-        prog = (Term (Numeric (NNTerm (sub_hole_nterm (transform_int_nterm n length) hole_map))));
+        prog =
+          Term
+            (Numeric
+               (NNTerm (sub_hole_nterm (transform_int_nterm n length) hole_map)));
         post = sub_holes (bool_finite_vs_transformer length trip.post) hole_map;
       }
   | Term (Bitvec (BitvNTerm n)) ->
       {
         pre = sub_holes (bool_finite_vs_transformer length trip.pre) hole_map;
-        prog = (Term (Bitvec (BitvNTerm (sub_hole_nterm (transform_bitv_nterm n length) hole_map))));
+        prog =
+          Term
+            (Bitvec
+               (BitvNTerm
+                  (sub_hole_nterm (transform_bitv_nterm n length) hole_map)));
         post = sub_holes (bool_finite_vs_transformer length trip.post) hole_map;
       }
   | Boolean (BNTerm n) ->
       {
         pre = sub_holes (bool_finite_vs_transformer length trip.pre) hole_map;
-        prog = (Boolean (BNTerm (sub_hole_nterm (transform_bool_nterm n length) hole_map)));
+        prog =
+          Boolean
+            (BNTerm (sub_hole_nterm (transform_bool_nterm n length) hole_map));
         post = sub_holes (bool_finite_vs_transformer length trip.post) hole_map;
       }
   | Stmt (SNTerm n) ->
       {
         pre = sub_holes (bool_finite_vs_transformer length trip.pre) hole_map;
-        prog = (Stmt (SNTerm (sub_hole_nterm (transform_stmt_nterm n length) hole_map)));
+        prog =
+          Stmt
+            (SNTerm (sub_hole_nterm (transform_stmt_nterm n length) hole_map));
         post = sub_holes (bool_finite_vs_transformer length trip.post) hole_map;
       }
   | _ ->
@@ -301,6 +322,7 @@ let rec plug_holes (rule : ruleApp) (length : int)
   | Const ctrip -> Const (plug_holes_ctrip ctrip length hole_map)
   | True ctrip -> True (plug_holes_ctrip ctrip length hole_map)
   | False ctrip -> False (plug_holes_ctrip ctrip length hole_map)
+  | Skip ctrip -> Skip (plug_holes_ctrip ctrip length hole_map)
   | Var ctrip -> Var (plug_holes_ctrip ctrip length hole_map)
   | UnApp (ctrip, pf) ->
       UnApp
@@ -317,6 +339,9 @@ let rec plug_holes (rule : ruleApp) (length : int)
         ( plug_holes_ctrip ctrip length hole_map,
           plug_holes lpf length hole_map,
           plug_holes rpf length hole_map )
+  | UnaryMinus (ctrip, pf) ->
+      UnaryMinus
+        (plug_holes_ctrip ctrip length hole_map, plug_holes pf length hole_map)
   | And (ctrip, lpf, rpf) ->
       And
         ( plug_holes_ctrip ctrip length hole_map,

@@ -1,3 +1,0 @@
-benchmarks/nope_benchmarks/CLIA_Track_IF/fg_guard1/example*.txt
-benchmarks/nope_benchmarks/CLIA_Track_IF/fg_guard2/example*.txt
-benchmarks/nope_benchmarks/CLIA_Track_IF/fg_guard3/example*.txt

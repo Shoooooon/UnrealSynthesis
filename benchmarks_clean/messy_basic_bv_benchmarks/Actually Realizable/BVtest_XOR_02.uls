@@ -1,0 +1,4 @@
+ACTUALLY, NOR = NOT (OR)
+
+[Bitvec E : [x, y, (bvnot Nonterm E), (bvand Nonterm E Nonterm E), (bvor Nonterm E Nonterm E)] : Some ([(ABitvec e_t, ABitvec e_t_2)] : (Hole : Ehole [ABitvec e_t, ABitvec x, ABitvec y]))]
+                 {|(and (bv= x[2] #x000000f7) (and (bv= y[2] #x0000002c) (and (bv= x[1] #x00000009) (bv= y[1] #x00000006))))|} Bitvec Nonterm E {|(not (and (bv= e_t[1] #x0000000f) (bv= e_t[2] #x000000db)))|}

@@ -19,6 +19,7 @@ and numeric_exp =
   | Int of int
   | Var of string
   | Plus of numeric_exp * numeric_exp
+  | Minus of numeric_exp
   | ITE of boolean_exp * numeric_exp * numeric_exp
   | NNTerm of numeric_exp nonterminal
 
@@ -35,7 +36,7 @@ and boolean_exp =
   | BNTerm of boolean_exp nonterminal
 
 type stmt =
-  (* TODO: NEED TO HAVE ASSIGN ENCODE TYPE OF ASSIGNEE *)
+  | Skip
   | Assign of string * term_exp
   | Seq of stmt * stmt
   | ITE of boolean_exp * stmt * stmt
@@ -56,6 +57,7 @@ let rec numeric_to_str num_exp =
   | Var x -> x
   | Plus (n1, n2) ->
       Printf.sprintf "(%s + %s)" (numeric_to_str n1) (numeric_to_str n2)
+  | Minus n -> Printf.sprintf "(- %s)" (numeric_to_str n)
   | ITE (b, n1, n2) ->
       Printf.sprintf "(if %s then %s else %s)" (prog_tostr (Boolean b))
         (numeric_to_str n1) (numeric_to_str n2)
@@ -107,12 +109,16 @@ and prog_tostr prog =
   | Boolean (Less (t1, t2)) ->
       Printf.sprintf "(%s < %s)" (term_to_str t1) (term_to_str t2)
   | Boolean (BNTerm nterm) -> to_str nterm
-  | Stmt (Assign (v, t)) ->
-      (match t with
-        | Numeric n ->
-            Printf.sprintf "(%s := %s)" (numeric_to_str (Var v)) (numeric_to_str n)
-        | Bitvec btv ->
-            Printf.sprintf "(%s := %s)" (bitvec_to_str (BitvVar v)) (bitvec_to_str btv))
+  | Stmt Skip -> "skip"
+  | Stmt (Assign (v, t)) -> (
+      match t with
+      | Numeric n ->
+          Printf.sprintf "(%s := %s)" (numeric_to_str (Var v))
+            (numeric_to_str n)
+      | Bitvec btv ->
+          Printf.sprintf "(%s := %s)"
+            (bitvec_to_str (BitvVar v))
+            (bitvec_to_str btv))
   | Stmt (Seq (s1, s2)) ->
       Printf.sprintf "(%s; %s)" (prog_tostr (Stmt s1)) (prog_tostr (Stmt s2))
   | Stmt (ITE (b, s1, s2)) ->
@@ -133,6 +139,8 @@ let rec prog_to_parseable_str prog =
       Printf.sprintf "(+ %s %s)"
         (prog_to_parseable_str (Term (Numeric n1)))
         (prog_to_parseable_str (Term (Numeric n2)))
+  | Term (Numeric (Minus n)) ->
+      Printf.sprintf "(- %s)" (prog_to_parseable_str (Term (Numeric n)))
   | Term (Numeric (ITE (b, n1, n2))) ->
       Printf.sprintf "(if %s then %s else %s)"
         (prog_to_parseable_str (Boolean b))
@@ -171,16 +179,17 @@ let rec prog_to_parseable_str prog =
         (prog_to_parseable_str (Term (Bitvec btv2)))
   | Boolean (Less (_, _)) -> raise Unimplemented
   | Boolean (BNTerm nterm) -> Printf.sprintf "Nonterm %s" nterm.name
-  | Stmt (Assign (v, t)) ->
-      (match t with
+  | Stmt Skip -> "skip"
+  | Stmt (Assign (v, t)) -> (
+      match t with
       | Numeric n ->
-        Printf.sprintf "(:= %s %s)"
-          (prog_to_parseable_str (Term (Numeric (Var v))))
-          (prog_to_parseable_str (Term (Numeric n)))
+          Printf.sprintf "(:= %s %s)"
+            (prog_to_parseable_str (Term (Numeric (Var v))))
+            (prog_to_parseable_str (Term (Numeric n)))
       | Bitvec btv ->
-        Printf.sprintf "(:= %s %s)"
-          (prog_to_parseable_str (Term (Bitvec (BitvVar v))))
-          (prog_to_parseable_str (Term (Bitvec btv))))
+          Printf.sprintf "(:= %s %s)"
+            (prog_to_parseable_str (Term (Bitvec (BitvVar v))))
+            (prog_to_parseable_str (Term (Bitvec btv))))
   | Stmt (Seq (s1, s2)) ->
       Printf.sprintf "(; %s %s)"
         (prog_to_parseable_str (Stmt s1))
@@ -212,6 +221,8 @@ let rec get_program_vars_helper prog examined =
         get_program_vars_helper (Term (Numeric n2)) lhs_examined
       in
       (VS.union lhs_set rhs_set, rhs_examined)
+  | Term (Numeric (Minus n)) ->
+      get_program_vars_helper (Term (Numeric n)) examined
   | Term (Numeric (ITE (b, n1, n2))) ->
       let guard_set, guard_examined =
         get_program_vars_helper (Boolean b) examined
@@ -313,18 +324,19 @@ let rec get_program_vars_helper prog examined =
             (VS.union vars found_vars, examined_stuff))
           (VS.empty, List.cons prog examined)
           (NonTerminal.expand nterm)
-  | Stmt (Assign (v, t)) ->
-      (match t with
+  | Stmt Skip -> (VS.empty, examined)
+  | Stmt (Assign (v, t)) -> (
+      match t with
       | Numeric n ->
-        let rhs_set, rhs_examined =
-          get_program_vars_helper (Term (Numeric n)) examined
-        in
-        (VS.add (IntTermVar (T v)) rhs_set, rhs_examined)
+          let rhs_set, rhs_examined =
+            get_program_vars_helper (Term (Numeric n)) examined
+          in
+          (VS.add (IntTermVar (T v)) rhs_set, rhs_examined)
       | Bitvec btv ->
-        let rhs_set, rhs_examined =
-          get_program_vars_helper (Term (Bitvec btv)) examined
-        in
-        (VS.add (BitvTermVar (T v)) rhs_set, rhs_examined))
+          let rhs_set, rhs_examined =
+            get_program_vars_helper (Term (Bitvec btv)) examined
+          in
+          (VS.add (BitvTermVar (T v)) rhs_set, rhs_examined))
   | Stmt (Seq (s1, s2)) ->
       let lhs_set, lhs_examined = get_program_vars_helper (Stmt s1) examined in
       let rhs_set, rhs_examined =
@@ -378,12 +390,11 @@ let rec reassigned_vars_helper prog examined =
   | Term (Numeric _) -> VS.empty
   | Term (Bitvec _) -> VS.empty
   | Boolean _ -> VS.empty
-  | Stmt (Assign (v, t)) -> 
-    (match t with 
-    |Numeric _ -> 
-      VS.singleton (IntTermVar (T v))
-      |Bitvec _ ->
-        VS.singleton (BitvTermVar (T v)))
+  | Stmt Skip -> VS.empty
+  | Stmt (Assign (v, t)) -> (
+      match t with
+      | Numeric _ -> VS.singleton (IntTermVar (T v))
+      | Bitvec _ -> VS.singleton (BitvTermVar (T v)))
   | Stmt (Seq (s1, s2)) ->
       VS.union
         (reassigned_vars_helper (Stmt s1) examined)
@@ -405,8 +416,14 @@ let rec reassigned_vars_helper prog examined =
              (NonTerminal.expand n))
 
 let reassigned_vars prog =
-  VS.add (IntTermVar ET)
-    (VS.add (BoolVar BT) (reassigned_vars_helper prog SNTS.empty))
+  (* If something broke, it happened here. *)
+  match prog with
+  | Term (Numeric _) ->
+      VS.add (IntTermVar ET) (reassigned_vars_helper prog SNTS.empty)
+  | Term (Bitvec _) ->
+      VS.add (BitvTermVar ET) (reassigned_vars_helper prog SNTS.empty)
+  | Boolean _ -> VS.add (BoolVar BT) (reassigned_vars_helper prog SNTS.empty)
+  | Stmt _ -> reassigned_vars_helper prog SNTS.empty
 
 (* Returns set of reassigned vars excluding ET and BT, unless the program is a bool or int *)
 let reassigned_vars_clean prog =
@@ -433,6 +450,7 @@ let rec subs_nonterms_numeric lazy_grammar num =
       Plus
         ( subs_nonterms_numeric lazy_grammar n1,
           subs_nonterms_numeric lazy_grammar n2 )
+  | Minus n -> Minus (subs_nonterms_numeric lazy_grammar n)
   | ITE (b, n1, n2) ->
       ITE
         ( subs_nonterms_boolean lazy_grammar b,
@@ -496,12 +514,12 @@ and subs_nonterms_boolean lazy_grammar boolean =
 and subs_nonterms_stmt lazy_grammar stmt =
   let grammar = Lazy.force lazy_grammar in
   match stmt with
-  | Assign (s, t) -> 
-    (match t with 
-    | Numeric n ->
-    Assign (s, Numeric (subs_nonterms_numeric lazy_grammar n))
-    | Bitvec btv ->
-    Assign (s, Bitvec (subs_nonterms_bitvec lazy_grammar btv)))
+  | Skip -> Skip
+  | Assign (s, t) -> (
+      match t with
+      | Numeric n -> Assign (s, Numeric (subs_nonterms_numeric lazy_grammar n))
+      | Bitvec btv -> Assign (s, Bitvec (subs_nonterms_bitvec lazy_grammar btv))
+      )
   | Seq (s1, s2) ->
       Seq
         (subs_nonterms_stmt lazy_grammar s1, subs_nonterms_stmt lazy_grammar s2)
@@ -534,6 +552,7 @@ let rec get_nonterms_helper prog grm =
   | Term (Numeric (Plus (n1, n2))) ->
       get_nonterms_helper (Term (Numeric n2))
         (get_nonterms_helper (Term (Numeric n1)) grm)
+  | Term (Numeric (Minus n)) -> get_nonterms_helper (Term (Numeric n)) grm
   | Term (Numeric (ITE (b, n1, n2))) ->
       get_nonterms_helper (Boolean b)
         (get_nonterms_helper (Term (Numeric n1))
@@ -596,12 +615,11 @@ let rec get_nonterms_helper prog grm =
             grammar_stmt = grm.grammar_stmt;
           }
           (expand nterm)
-  | Stmt (Assign (_, t)) -> 
-    (match t with 
-    | Numeric n ->
-    get_nonterms_helper (Term (Numeric n)) grm
-    | Bitvec btv ->
-    get_nonterms_helper (Term (Bitvec btv)) grm)
+  | Stmt Skip -> grm
+  | Stmt (Assign (_, t)) -> (
+      match t with
+      | Numeric n -> get_nonterms_helper (Term (Numeric n)) grm
+      | Bitvec btv -> get_nonterms_helper (Term (Bitvec btv)) grm)
   | Stmt (Seq (s1, s2)) ->
       get_nonterms_helper (Stmt s1) (get_nonterms_helper (Stmt s2) grm)
   | Stmt (ITE (b, s1, s2)) ->
@@ -652,17 +670,17 @@ let grammar_to_parseable_str gram =
   let alls = List.append ns (List.append bs ss) in
   Printf.sprintf "[%s]" (String.concat "; " alls)
 
-
 (* Finite vector-state transformations on program hole values. *)
 (* Repeated code because OCaml didn't allow polymorphism here... why? *)
-let rec transform_int_nterm (nterm :'program nonterminal) (length : int) 
-(* (transformer : 'program -> int -> 'program) *)
- = 
+let rec transform_int_nterm (nterm : 'program nonterminal)
+    (length : int) (* (transformer : 'program -> int -> 'program) *) =
   {
     name = nterm.name;
-    expansions = (lazy (List.map
-    (fun x -> int_term_finite_vs_transformer x length ) 
-    (Lazy.force nterm.expansions)));
+    expansions =
+      lazy
+        (List.map
+           (fun x -> int_term_finite_vs_transformer x length)
+           (Lazy.force nterm.expansions));
     (* When a non-terminal is not recursive, strongest should be None. *)
     strongest =
       lazy
@@ -674,14 +692,15 @@ let rec transform_int_nterm (nterm :'program nonterminal) (length : int)
                 Logic.Formula.bool_finite_vs_transformer length form ));
   }
 
-and transform_bitv_nterm (nterm : bitv_exp nonterminal) (length : int) 
-(* (transformer : bitv_exp -> int -> bitv_exp) *)
- = 
+and transform_bitv_nterm (nterm : bitv_exp nonterminal)
+    (length : int) (* (transformer : bitv_exp -> int -> bitv_exp) *) =
   {
     name = nterm.name;
-    expansions = (lazy (List.map
-    (fun x -> bitv_term_finite_vs_transformer x length ) 
-    (Lazy.force nterm.expansions)));
+    expansions =
+      lazy
+        (List.map
+           (fun x -> bitv_term_finite_vs_transformer x length)
+           (Lazy.force nterm.expansions));
     (* When a non-terminal is not recursive, strongest should be None. *)
     strongest =
       lazy
@@ -693,14 +712,15 @@ and transform_bitv_nterm (nterm : bitv_exp nonterminal) (length : int)
                 Logic.Formula.bool_finite_vs_transformer length form ));
   }
 
-and transform_bool_nterm (nterm : boolean_exp nonterminal) (length : int) 
-(* (transformer : boolean_exp -> int -> boolean_exp) *)
- = 
+and transform_bool_nterm (nterm : boolean_exp nonterminal)
+    (length : int) (* (transformer : boolean_exp -> int -> boolean_exp) *) =
   {
     name = nterm.name;
-    expansions = (lazy (List.map
-    (fun x -> bool_prog_finite_vs_transformer x length ) 
-    (Lazy.force nterm.expansions)));
+    expansions =
+      lazy
+        (List.map
+           (fun x -> bool_prog_finite_vs_transformer x length)
+           (Lazy.force nterm.expansions));
     (* When a non-terminal is not recursive, strongest should be None. *)
     strongest =
       lazy
@@ -712,71 +732,114 @@ and transform_bool_nterm (nterm : boolean_exp nonterminal) (length : int)
                 Logic.Formula.bool_finite_vs_transformer length form ));
   }
 
-and transform_stmt_nterm (nterm : stmt nonterminal) (length : int) 
-  (* (transformer : stmt -> int -> stmt) *)
-   = 
-    {
-      name = nterm.name;
-      expansions = (lazy (List.map
-      (fun x -> stmt_finite_vs_transformer x length ) 
-      (Lazy.force nterm.expansions)));
-      (* When a non-terminal is not recursive, strongest should be None. *)
-      strongest =
-        lazy
-          (match Lazy.force nterm.strongest with
-          | None -> None
-          | Some (var_pairs_list, form) ->
-              Some
-                ( var_pairs_list,
-                  Logic.Formula.bool_finite_vs_transformer length form ));
-    }
+and transform_stmt_nterm (nterm : stmt nonterminal)
+    (length : int) (* (transformer : stmt -> int -> stmt) *) =
+  {
+    name = nterm.name;
+    expansions =
+      lazy
+        (List.map
+           (fun x -> stmt_finite_vs_transformer x length)
+           (Lazy.force nterm.expansions));
+    (* When a non-terminal is not recursive, strongest should be None. *)
+    strongest =
+      lazy
+        (match Lazy.force nterm.strongest with
+        | None -> None
+        | Some (var_pairs_list, form) ->
+            Some
+              ( var_pairs_list,
+                Logic.Formula.bool_finite_vs_transformer length form ));
+  }
 
-and int_term_finite_vs_transformer iterm length = 
+and int_term_finite_vs_transformer iterm length =
   match iterm with
-  | Plus (t1, t2) -> Plus (int_term_finite_vs_transformer t1 length, int_term_finite_vs_transformer t2 length)
-  | ITE (b, t1, t2) -> ITE (bool_prog_finite_vs_transformer b length, int_term_finite_vs_transformer t1 length, int_term_finite_vs_transformer t2 length) 
+  | Plus (t1, t2) ->
+      Plus
+        ( int_term_finite_vs_transformer t1 length,
+          int_term_finite_vs_transformer t2 length )
+  | Minus t -> Minus (int_term_finite_vs_transformer t length)
+  | ITE (b, t1, t2) ->
+      ITE
+        ( bool_prog_finite_vs_transformer b length,
+          int_term_finite_vs_transformer t1 length,
+          int_term_finite_vs_transformer t2 length )
   | NNTerm n -> NNTerm (transform_int_nterm n length)
   | _ -> iterm
-  
-and bitv_term_finite_vs_transformer bitvterm length = 
+
+and bitv_term_finite_vs_transformer bitvterm length =
   match bitvterm with
-  | BitvUnApp (op, btv) -> BitvUnApp (op, bitv_term_finite_vs_transformer btv length)
-  | BinApp (op, btv1, btv2) -> BinApp (op, bitv_term_finite_vs_transformer btv1 length, bitv_term_finite_vs_transformer btv2 length)
-  | BitvITE (b, btv1, btv2) -> BitvITE (bool_prog_finite_vs_transformer b length, bitv_term_finite_vs_transformer btv1 length, bitv_term_finite_vs_transformer btv2 length) 
+  | BitvUnApp (op, btv) ->
+      BitvUnApp (op, bitv_term_finite_vs_transformer btv length)
+  | BinApp (op, btv1, btv2) ->
+      BinApp
+        ( op,
+          bitv_term_finite_vs_transformer btv1 length,
+          bitv_term_finite_vs_transformer btv2 length )
+  | BitvITE (b, btv1, btv2) ->
+      BitvITE
+        ( bool_prog_finite_vs_transformer b length,
+          bitv_term_finite_vs_transformer btv1 length,
+          bitv_term_finite_vs_transformer btv2 length )
   | BitvNTerm n -> BitvNTerm (transform_bitv_nterm n length)
   | _ -> bitvterm
 
-and term_finite_vs_transformer term length = 
+and term_finite_vs_transformer term length =
   match term with
-  | Numeric it -> (Numeric (int_term_finite_vs_transformer it length))
-  | Bitvec btv -> (Bitvec (bitv_term_finite_vs_transformer btv length))
+  | Numeric it -> Numeric (int_term_finite_vs_transformer it length)
+  | Bitvec btv -> Bitvec (bitv_term_finite_vs_transformer btv length)
 
-and bool_prog_finite_vs_transformer form length = 
+and bool_prog_finite_vs_transformer form length =
   match form with
-  | Not (f) -> Not (bool_prog_finite_vs_transformer f length)
-  | And (f1, f2) -> And (bool_prog_finite_vs_transformer f1 length, bool_prog_finite_vs_transformer f2 length)
-  | Or (f1, f2) -> Or (bool_prog_finite_vs_transformer f1 length, bool_prog_finite_vs_transformer f2 length)
-  | Equals (t1, t2) -> Equals (term_finite_vs_transformer t1 length, term_finite_vs_transformer t2 length)
-  | Less (t1, t2) -> Less (term_finite_vs_transformer t1 length, term_finite_vs_transformer t2 length)
+  | Not f -> Not (bool_prog_finite_vs_transformer f length)
+  | And (f1, f2) ->
+      And
+        ( bool_prog_finite_vs_transformer f1 length,
+          bool_prog_finite_vs_transformer f2 length )
+  | Or (f1, f2) ->
+      Or
+        ( bool_prog_finite_vs_transformer f1 length,
+          bool_prog_finite_vs_transformer f2 length )
+  | Equals (t1, t2) ->
+      Equals
+        ( term_finite_vs_transformer t1 length,
+          term_finite_vs_transformer t2 length )
+  | Less (t1, t2) ->
+      Less
+        ( term_finite_vs_transformer t1 length,
+          term_finite_vs_transformer t2 length )
   | BNTerm n -> BNTerm (transform_bool_nterm n length)
   | _ -> form
 
-and stmt_finite_vs_transformer stmt length = 
+and stmt_finite_vs_transformer stmt length =
   match stmt with
-  | Assign (v, t) -> 
-    (match t with 
-    | Numeric it -> 
-      Assign (v, Numeric (int_term_finite_vs_transformer it length))
-    | Bitvec bitvt -> 
-      Assign (v, Bitvec (bitv_term_finite_vs_transformer bitvt length)))
-  | Seq (s1, s2) -> Seq (stmt_finite_vs_transformer s1 length, stmt_finite_vs_transformer s2 length) 
-  | ITE (b, s1, s2) -> ITE (bool_prog_finite_vs_transformer b length, stmt_finite_vs_transformer s1 length, stmt_finite_vs_transformer s2 length) 
-  | While (b, inv, s) -> While (bool_prog_finite_vs_transformer b length, Logic.Formula.bool_finite_vs_transformer length inv, stmt_finite_vs_transformer s length)
+  | Skip -> Skip
+  | Assign (v, t) -> (
+      match t with
+      | Numeric it ->
+          Assign (v, Numeric (int_term_finite_vs_transformer it length))
+      | Bitvec bitvt ->
+          Assign (v, Bitvec (bitv_term_finite_vs_transformer bitvt length)))
+  | Seq (s1, s2) ->
+      Seq
+        ( stmt_finite_vs_transformer s1 length,
+          stmt_finite_vs_transformer s2 length )
+  | ITE (b, s1, s2) ->
+      ITE
+        ( bool_prog_finite_vs_transformer b length,
+          stmt_finite_vs_transformer s1 length,
+          stmt_finite_vs_transformer s2 length )
+  | While (b, inv, s) ->
+      While
+        ( bool_prog_finite_vs_transformer b length,
+          Logic.Formula.bool_finite_vs_transformer length inv,
+          stmt_finite_vs_transformer s length )
   | SNTerm n -> SNTerm (transform_stmt_nterm n length)
-  
-and prog_finite_vs_transformer prog length = 
-  if length < 1 then prog else
-  (match prog with
-  | Term t -> Term (term_finite_vs_transformer t length)
-  | Boolean b -> Boolean (bool_prog_finite_vs_transformer b length) 
-  | Stmt s -> Stmt (stmt_finite_vs_transformer s length))
+
+and prog_finite_vs_transformer prog length =
+  if length < 1 then prog
+  else
+    match prog with
+    | Term t -> Term (term_finite_vs_transformer t length)
+    | Boolean b -> Boolean (bool_prog_finite_vs_transformer b length)
+    | Stmt s -> Stmt (stmt_finite_vs_transformer s length)

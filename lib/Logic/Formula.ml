@@ -135,8 +135,8 @@ and bitv_term_tostr bitv_term =
   | BitvBinarApp (And, btv1, btv2) ->
       Printf.sprintf "(%s & %s)" (bitv_term_tostr btv1) (bitv_term_tostr btv2)
   | BitvTHole (s, arg_list) ->
-    Printf.sprintf "(%s (%s))" s
-      (String.concat ", " (List.map exp_tostr arg_list))
+      Printf.sprintf "(%s (%s))" s
+        (String.concat ", " (List.map exp_tostr arg_list))
 (* | ITVar v -> var_tostr (IntTermVar v)
    | AITVar (ITApp (at, i)) ->
        Printf.sprintf "%s[%s]" (var_tostr (AIntTermVar at)) (term_tostr i)
@@ -1016,15 +1016,14 @@ let rec sub_holes (form : formula)
   | Exists (v, b) -> Exists (v, sub_holes b hole_map)
   | Forall (v, b) -> Forall (v, sub_holes b hole_map)
   | BHole (s, arg_list) ->
-      if List.exists (fun ((a, _), _) -> a = s) hole_map then (
+      if List.exists (fun ((a, _), _) -> a = s) hole_map then
         let (_, old_args), body =
           List.find (fun ((a, _), _) -> a = s) hole_map
         in
         List.fold_left2
           (fun formul old_arg new_arg -> subs formul old_arg new_arg)
-          body old_args arg_list)
-      else (
-        form)
+          body old_args arg_list
+      else form
   | T (f, bloop, t_map) -> t_transform (sub_holes f hole_map) bloop t_map
   | TPrime f -> t_prime_transform (sub_holes f hole_map)
   | _ -> form
@@ -1066,7 +1065,8 @@ let term_finite_vs_transformer term =
   | BitvTerm bitv -> BitvTerm (bitv_term_finite_vs_transformer bitv)
 
 let rec bool_finite_vs_transformer max_ind form =
-  match form with
+  if max_ind = 0 then form else
+  (match form with
   | ABVar (BApp (BT, Int i)) -> BVar (B (indexer "b_t" i))
   | ABVar (BApp (B v, Int i)) -> BVar (B (indexer v i))
   | And (f1, f2) ->
@@ -1210,7 +1210,7 @@ let rec bool_finite_vs_transformer max_ind form =
          This is a bit of a hack to use all the infinite vs machinery and change it at the very end, but let's not worry about that. *)
       conjoined_holes
   | TPrime f -> TPrime (bool_finite_vs_transformer max_ind f)
-  | _ -> form
+  | _ -> form)
 
 and exp_finite_vs_transformer max_ind exp =
   match exp with

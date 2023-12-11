@@ -10,6 +10,8 @@ exception Unsupported_Mode
 
 type synthMode = HOLE_SYNTH | INVS_SPECIFIED
 type formMode = SIMPLE | FINITE_VECTOR_STATE | VECTOR_STATE
+type holeGuideMode = NONE | BITVEC
+type vcSimplificationMode = NO_SIMP | QUANTIFY_COLLECT
 
 (* Handles building proofs for the 3 types of non-terminals polymorphically.
    Reassigned_var_finder finds the reassigned vars from a given program; taking this as input lets us support simple and vector-state behaviors.
@@ -588,6 +590,15 @@ let false_template tv (ctrip : contextualized_triple_no_pre) =
 let false_simple = false_template simple_int_tv
 let false_vector_state = false_template vector_state_int_tv
 
+(* SKIP *)
+let skip (ctrip : contextualized_triple_no_pre) =
+  let trip = ctrip.trip in
+  Skip
+    {
+      context = ctrip.context;
+      trip = { pre = trip.post; prog = trip.prog; post = trip.post };
+    }
+
 (* NOT *)
 let not_template tv b (ctrip : contextualized_triple_no_pre) build_pf implies =
   let trip = ctrip.trip in
@@ -651,7 +662,7 @@ let bitv_minus_simple =
       Term (BitvTerm (BitvUnarApp (Minus, x))))
 
 let bitv_minus_vector_state =
-  unapp_template simple_bitv_tv (fun x ->
+  unapp_template vector_state_bitv_tv (fun x ->
       Term (BitvTerm (BitvUnarApp (Minus, x))))
 
 let binapp_template tv formula_binapp btv1 btv2
@@ -707,7 +718,7 @@ let bitv_plus_simple =
 let bitv_mult_simple =
   binapp_template simple_bitv_tv (fun x y ->
       Term (BitvTerm (BitvBinarApp (Mult, x, y))))
-      
+
 let bitv_sub_simple =
   binapp_template simple_bitv_tv (fun x y ->
       Term (BitvTerm (BitvBinarApp (Sub, x, y))))
@@ -719,7 +730,6 @@ let bitv_or_simple =
 let bitv_xor_simple =
   binapp_template simple_bitv_tv (fun x y ->
       Term (BitvTerm (BitvBinarApp (Xor, x, y))))
-      
 
 let bitv_and_simple =
   binapp_template simple_bitv_tv (fun x y ->
@@ -732,7 +742,7 @@ let bitv_plus_vector_state =
 let bitv_mult_vector_state =
   binapp_template vector_state_bitv_tv (fun x y ->
       Term (BitvTerm (BitvBinarApp (Mult, x, y))))
-      
+
 let bitv_or_vector_state =
   binapp_template vector_state_bitv_tv (fun x y ->
       Term (BitvTerm (BitvBinarApp (Or, x, y))))
@@ -896,6 +906,38 @@ let plus_template tv n1 n2 (ctrip : contextualized_triple_no_pre) build_pf
 let plus_simple = plus_template simple_int_tv
 let plus_vector_state = plus_template vector_state_int_tv
 
+(* MINUS *)
+let minus_template tv n (ctrip : contextualized_triple_no_pre) build_pf implies
+    =
+  let trip = ctrip.trip in
+  let hyp =
+    build_pf
+      {
+        context = ctrip.context;
+        trip =
+          {
+            prog = Term (Numeric n);
+            post =
+              subs trip.post tv.et_var (Term (ITerm (Minus tv.et_int_term)));
+          };
+      }
+      implies
+  in
+  UnaryMinus
+    ( {
+        context = ctrip.context;
+        trip =
+          {
+            pre = (get_conclusion hyp).trip.pre;
+            prog = trip.prog;
+            post = trip.post;
+          };
+      },
+      hyp )
+
+let int_unaryminus_simple = minus_template simple_int_tv
+let int_unaryminus_vector_state = minus_template vector_state_int_tv
+
 (* EQUALS *)
 let equals_template tv t1 t2 (ctrip : contextualized_triple_no_pre) build_pf
     implies =
@@ -1025,8 +1067,8 @@ let less_vector_state a b =
   | _ -> raise Unsupported_Mode
 
 (* ASSIGN *)
-let assign_template tv input_to_prog v t (ctrip : contextualized_triple_no_pre) build_pf
-    implies =
+let assign_template tv input_to_prog v t (ctrip : contextualized_triple_no_pre)
+    build_pf implies =
   let trip = ctrip.trip in
   let hyp =
     build_pf
@@ -1034,10 +1076,8 @@ let assign_template tv input_to_prog v t (ctrip : contextualized_triple_no_pre) 
         context = ctrip.context;
         trip =
           {
-            prog = (input_to_prog t);
-            post =
-              subs trip.post (tv.strvar_to_var_term v)
-                (Term tv.et_term);
+            prog = input_to_prog t;
+            post = subs trip.post (tv.strvar_to_var_term v) (Term tv.et_term);
           };
       }
       implies
@@ -1054,10 +1094,17 @@ let assign_template tv input_to_prog v t (ctrip : contextualized_triple_no_pre) 
       },
       hyp )
 
-let assign_int_simple = assign_template simple_int_tv (fun it -> Term (Numeric it))
-let assign_int_vector_state = assign_template vector_state_int_tv (fun it -> Term (Numeric it))
-let assign_bitv_simple = assign_template simple_bitv_tv (fun bitvt -> Term (Bitvec bitvt))
-let assign_bitv_vector_state = assign_template vector_state_bitv_tv (fun bitvt -> Term (Bitvec bitvt))
+let assign_int_simple =
+  assign_template simple_int_tv (fun it -> Term (Numeric it))
+
+let assign_int_vector_state =
+  assign_template vector_state_int_tv (fun it -> Term (Numeric it))
+
+let assign_bitv_simple =
+  assign_template simple_bitv_tv (fun bitvt -> Term (Bitvec bitvt))
+
+let assign_bitv_vector_state =
+  assign_template vector_state_bitv_tv (fun bitvt -> Term (Bitvec bitvt))
 
 (* SEQ *)
 let seq_template s1 s2 (ctrip : contextualized_triple_no_pre) build_pf implies =
@@ -1198,7 +1245,6 @@ let ite_vector_state_template prog_setter b a1 a2
              xzmap)
          []
   in
-
   let else_hyp =
     build_pf
       {
@@ -1369,6 +1415,73 @@ let while_simple b inv s (ctrip : contextualized_triple_no_pre) build_pf implies
           implies Logic.Formula.True (get_conclusion guard_hyp_raw).trip.pre ),
       body_hyp )
 
+(* Severely underapproximate/incomplete VSWhile rule. *)
+(* The rule is I(ITE)I + P(B)(\forall i. \neg b_t[i]) => I(whileBdoS)(I \land P) *)
+let while_vector_state b inv s (ctrip : contextualized_triple_no_pre)
+    vector_length build_pf implies =
+  let trip = ctrip.trip in
+  let fresh_index = fresh_var_name trip.post [] in
+  let guard_hyp =
+    build_pf
+      {
+        context = ctrip.context;
+        trip =
+          {
+            prog = Boolean b;
+            post =
+              (if vector_length = 0 then
+                 Forall
+                   ( IntTermVar (T fresh_index),
+                     Not (ABVar (BApp (BT, ITVar (T fresh_index)))) )
+               else
+                 List.fold_left
+                   (fun form index ->
+                     Logic.Formula.And (form, Not (ABVar (BApp (BT, Int index)))))
+                   True
+                   (List.init vector_length (fun x -> x + 1)));
+          };
+      }
+      implies
+  in
+  let ite_hyp =
+    build_pf
+      {
+        context = ctrip.context;
+        trip = { prog = Stmt (ITE (b, s, Skip)); post = inv };
+      }
+      implies
+  in
+  let ite_hyp_wknd =
+    Weaken
+      ( {
+          context = ctrip.context;
+          trip = { pre = inv; prog = Stmt (ITE (b, s, Skip)); post = inv };
+        },
+        ite_hyp,
+        implies inv (get_conclusion ite_hyp).trip.pre )
+  in
+  let strong_while =
+    While
+      ( {
+          context = ctrip.context;
+          trip =
+            {
+              pre = inv;
+              prog = trip.prog;
+              post = And (inv, (get_conclusion guard_hyp).trip.pre);
+            };
+        },
+        guard_hyp,
+        ite_hyp_wknd )
+  in
+  Weaken
+    ( {
+        context = ctrip.context;
+        trip = { pre = inv; prog = trip.prog; post = trip.post };
+      },
+      strong_while,
+      implies (And (inv, (get_conclusion guard_hyp).trip.pre)) trip.post )
+
 (* let while_vector_state b inv s (ctrip : contextualized_triple_no_pre) build_pf implies
        =
      let trip = ctrip.trip in
@@ -1509,6 +1622,8 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre)
   | Term (Numeric (Var x)) -> int_var_simple x ctrip
   | Term (Numeric (Plus (t1, t2))) ->
       plus_simple t1 t2 ctrip build_wpc_proof implies
+  | Term (Numeric (Minus t)) ->
+      int_unaryminus_simple t ctrip build_wpc_proof implies
   | Term (Numeric (ITE (b, n1, n2))) ->
       ite_simple_numeric b n1 n2 ctrip build_wpc_proof implies
   | Term (Numeric (NNTerm nterm)) ->
@@ -1520,7 +1635,7 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre)
   | Term (Bitvec (BinApp (Plus, btv1, btv2))) ->
       bitv_plus_simple btv1 btv2 ctrip build_wpc_proof implies
   | Term (Bitvec (BinApp (Mult, btv1, btv2))) ->
-      bitv_plus_simple btv1 btv2 ctrip build_wpc_proof implies
+      bitv_mult_simple btv1 btv2 ctrip build_wpc_proof implies
   | Term (Bitvec (BinApp (Sub, btv1, btv2))) ->
       bitv_sub_simple btv1 btv2 ctrip build_wpc_proof implies
   | Term (Bitvec (BinApp (Or, btv1, btv2))) ->
@@ -1543,12 +1658,11 @@ let rec build_wpc_proof (ctrip : contextualized_triple_no_pre)
   | Boolean (Less (n1, n2)) -> less_simple n1 n2 ctrip build_wpc_proof implies
   | Boolean (BNTerm nterm) ->
       nonterm_handler_simple_boolean nterm ctrip 0 build_wpc_proof implies
-  | Stmt (Assign (v, t)) -> 
-    (match t with 
-    | Numeric n ->
-    assign_int_simple v n ctrip build_wpc_proof implies
-    | Bitvec btv ->
-    assign_bitv_simple v btv ctrip build_wpc_proof implies)
+  | Stmt Skip -> skip ctrip
+  | Stmt (Assign (v, t)) -> (
+      match t with
+      | Numeric n -> assign_int_simple v n ctrip build_wpc_proof implies
+      | Bitvec btv -> assign_bitv_simple v btv ctrip build_wpc_proof implies)
   | Stmt (Seq (s1, s2)) -> seq_simple s1 s2 ctrip build_wpc_proof implies
   | Stmt (ITE (b, s1, s2)) ->
       ite_simple_stmt b s1 s2 ctrip build_wpc_proof implies
@@ -1567,6 +1681,10 @@ let rec build_wpc_proof_finite_vector_state (length : int)
   | Term (Numeric (Var x)) -> int_var_vector_state x ctrip
   | Term (Numeric (Plus (t1, t2))) ->
       plus_vector_state t1 t2 ctrip
+        (build_wpc_proof_finite_vector_state length)
+        implies
+  | Term (Numeric (Minus t)) ->
+      int_unaryminus_vector_state t ctrip
         (build_wpc_proof_finite_vector_state length)
         implies
   | Term (Numeric (ITE (b, s1, s2))) ->
@@ -1588,13 +1706,13 @@ let rec build_wpc_proof_finite_vector_state (length : int)
         (build_wpc_proof_finite_vector_state length)
         implies
   | Term (Bitvec (BinApp (Mult, btv1, btv2))) ->
-      bitv_plus_vector_state btv1 btv2 ctrip
+      bitv_mult_vector_state btv1 btv2 ctrip
         (build_wpc_proof_finite_vector_state length)
         implies
   | Term (Bitvec (BinApp (Sub, btv1, btv2))) ->
-    bitv_plus_vector_state btv1 btv2 ctrip
-      (build_wpc_proof_finite_vector_state length)
-      implies
+      bitv_plus_vector_state btv1 btv2 ctrip
+        (build_wpc_proof_finite_vector_state length)
+        implies
   | Term (Bitvec (BinApp (Or, btv1, btv2))) ->
       bitv_or_vector_state btv1 btv2 ctrip
         (build_wpc_proof_finite_vector_state length)
@@ -1641,16 +1759,17 @@ let rec build_wpc_proof_finite_vector_state (length : int)
       nonterm_handler_vector_state_boolean nterm ctrip length
         (build_wpc_proof_finite_vector_state length)
         implies
-  | Stmt (Assign (v, t)) ->
-    (match t with
-    | Numeric n ->
-      assign_int_vector_state v n ctrip
-        (build_wpc_proof_finite_vector_state length)
-        implies
-    | Bitvec btv ->
-      assign_bitv_vector_state v btv ctrip
-        (build_wpc_proof_finite_vector_state length)
-        implies)
+  | Stmt Skip -> skip ctrip
+  | Stmt (Assign (v, t)) -> (
+      match t with
+      | Numeric n ->
+          assign_int_vector_state v n ctrip
+            (build_wpc_proof_finite_vector_state length)
+            implies
+      | Bitvec btv ->
+          assign_bitv_vector_state v btv ctrip
+            (build_wpc_proof_finite_vector_state length)
+            implies)
   | Stmt (Seq (s1, s2)) ->
       seq_vecor_state s1 s2 ctrip
         (build_wpc_proof_finite_vector_state length)
@@ -1663,7 +1782,10 @@ let rec build_wpc_proof_finite_vector_state (length : int)
       nonterm_handler_vector_state_stmt nterm ctrip length
         (build_wpc_proof_finite_vector_state length)
         implies
-  | _ -> raise Unsupported_Var
+  | Stmt (While (b, inv, s)) ->
+      while_vector_state b inv s ctrip length
+        (build_wpc_proof_finite_vector_state length)
+        implies
 
 let rec build_wpc_proof_vector_state (ctrip : contextualized_triple_no_pre)
     (implies : formula -> formula -> bool Lazy.t) =
@@ -1673,6 +1795,8 @@ let rec build_wpc_proof_vector_state (ctrip : contextualized_triple_no_pre)
   | Term (Numeric (Var x)) -> int_var_vector_state x ctrip
   | Term (Numeric (Plus (t1, t2))) ->
       plus_vector_state t1 t2 ctrip build_wpc_proof_vector_state implies
+  | Term (Numeric (Minus t)) ->
+      int_unaryminus_vector_state t ctrip build_wpc_proof_vector_state implies
   | Term (Numeric (ITE (b, s1, s2))) ->
       ite_vector_state_numeric b s1 s2 ctrip build_wpc_proof_vector_state
         implies
@@ -1687,17 +1811,19 @@ let rec build_wpc_proof_vector_state (ctrip : contextualized_triple_no_pre)
       bitv_plus_vector_state btv1 btv2 ctrip build_wpc_proof_vector_state
         implies
   | Term (Bitvec (BinApp (Mult, btv1, btv2))) ->
-      bitv_plus_vector_state btv1 btv2 ctrip build_wpc_proof_vector_state
+      bitv_mult_vector_state btv1 btv2 ctrip build_wpc_proof_vector_state
         implies
   | Term (Bitvec (BinApp (Sub, btv1, btv2))) ->
-    bitv_plus_vector_state btv1 btv2 ctrip build_wpc_proof_vector_state
-      implies
+      bitv_plus_vector_state btv1 btv2 ctrip build_wpc_proof_vector_state
+        implies
   | Term (Bitvec (BinApp (Or, btv1, btv2))) ->
       bitv_or_vector_state btv1 btv2 ctrip build_wpc_proof_vector_state implies
   | Term (Bitvec (BinApp (Xor, btv1, btv2))) ->
       bitv_xor_vector_state btv1 btv2 ctrip build_wpc_proof_vector_state implies
   | Term (Bitvec (BinApp (And, btv1, btv2))) ->
       bitv_and_vector_state btv1 btv2 ctrip build_wpc_proof_vector_state implies
+  | Term (Bitvec (BitvITE (b, s1, s2))) ->
+      ite_vector_state_bitvec b s1 s2 ctrip build_wpc_proof_vector_state implies
   | Term (Bitvec (BitvNTerm nterm)) ->
       nonterm_handler_vector_state_bitvec nterm ctrip 0
         build_wpc_proof_vector_state implies
@@ -1716,12 +1842,14 @@ let rec build_wpc_proof_vector_state (ctrip : contextualized_triple_no_pre)
   | Boolean (BNTerm nterm) ->
       nonterm_handler_vector_state_boolean nterm ctrip 0
         build_wpc_proof_vector_state implies
-  | Stmt (Assign (v, t)) ->
-    (match t with 
-    | Numeric n ->
-      assign_int_vector_state v n ctrip build_wpc_proof_vector_state implies
-    | Bitvec btv ->
-      assign_bitv_vector_state v btv ctrip build_wpc_proof_vector_state implies)
+  | Stmt Skip -> skip ctrip
+  | Stmt (Assign (v, t)) -> (
+      match t with
+      | Numeric n ->
+          assign_int_vector_state v n ctrip build_wpc_proof_vector_state implies
+      | Bitvec btv ->
+          assign_bitv_vector_state v btv ctrip build_wpc_proof_vector_state
+            implies)
   | Stmt (Seq (s1, s2)) ->
       seq_vecor_state s1 s2 ctrip build_wpc_proof_vector_state implies
   | Stmt (ITE (b, s1, s2)) ->
@@ -1729,27 +1857,41 @@ let rec build_wpc_proof_vector_state (ctrip : contextualized_triple_no_pre)
   | Stmt (SNTerm nterm) ->
       nonterm_handler_vector_state_stmt nterm ctrip 0
         build_wpc_proof_vector_state implies
-  | _ -> raise Unsupported_Var
+  | Stmt (While (b, inv, s)) ->
+      while_vector_state b inv s ctrip 0 build_wpc_proof_vector_state implies
 
-let prove (trip : triple) (smode : synthMode) (fmode : formMode) =
+let prove (trip : triple) (smode : synthMode) (fmode : formMode)
+    (hole_grm_mode : holeGuideMode) (vc_simp : vcSimplificationMode) =
   (* Imp is the implication handling module. The proof mode determines which module we use.
      Each module is set up as a 0-ary functor because the modules returned preserve a notion of state.
      Statefulness is necessary to gather implications, discharge them in parallel, etc.
      TODO: See if it makes more sense to do this with a continuation-passing-like scheme to fake statefulness. *)
+  let module VCSimp : Implications.VCSimpStrat = 
+    (val match vc_simp with 
+      | NO_SIMP -> (module Implications.No_Simp : Implications.VCSimpStrat)
+      | QUANTIFY_COLLECT -> (module Implications.Quantify_Collect : Implications.VCSimpStrat)
+      )
+    in
   let module Imp =
-    (val match (smode, fmode) with
-         | HOLE_SYNTH, SIMPLE ->
-             (module Implications.HoleSynthSimpleImplicatorCVC5 ())
-         | INVS_SPECIFIED, SIMPLE ->
-             (module Implications.NoHoleSimpleImplicatorZ3 ())
-         | INVS_SPECIFIED, VECTOR_STATE ->
-             (module Implications.NoHoleVectorStateImplicatorVampire ())
-         | INVS_SPECIFIED, FINITE_VECTOR_STATE ->
+    (val match (smode, fmode, hole_grm_mode) with
+         | HOLE_SYNTH, SIMPLE, NONE ->
+             (module Implications.HoleSynthSimpleImplicatorCVC5
+                       (Implications.UnconstrainedGrammarStrat)(VCSimp))
+         | INVS_SPECIFIED, SIMPLE, _ ->
+             (module Implications.NoHoleSimpleImplicatorZ3 (VCSimp))
+         | INVS_SPECIFIED, VECTOR_STATE, _ ->
+             (module Implications.NoHoleVectorStateImplicatorVampire (VCSimp))
+         | INVS_SPECIFIED, FINITE_VECTOR_STATE, _ ->
              Implications.finite_holeless_implicator
-               (max_index (Boolean (And (trip.pre, trip.post))))
-         | HOLE_SYNTH, FINITE_VECTOR_STATE ->
+               (max_index (Boolean (And (trip.pre, trip.post)))) (VCSimp.deconjunctivizer)
+         | HOLE_SYNTH, FINITE_VECTOR_STATE, NONE ->
              Implications.finite_holes_implicator
                (max_index (Boolean (And (trip.pre, trip.post))))
+               (Implications.UnconstrainedGrammarStrat.bool_hole_to_sygus_grammar) (VCSimp.deconjunctivizer_rhs)
+         | HOLE_SYNTH, FINITE_VECTOR_STATE, BITVEC ->
+             Implications.finite_holes_implicator
+               (max_index (Boolean (And (trip.pre, trip.post))))
+               (Implications.BitvecGrammarStrat.bool_hole_to_sygus_grammar) (VCSimp.deconjunctivizer_rhs)
          | _ -> raise Unsupported_Mode
         : Implications.ImplicationHandler)
   in
@@ -1773,5 +1915,4 @@ let prove (trip : triple) (smode : synthMode) (fmode : formMode) =
         strongest,
         Imp.implies trip.pre (get_conclusion strongest).trip.pre )
   in
-  full_pf
-  (* plug_holes full_pf length (Lazy.force Imp.hole_values) *)
+  plug_holes full_pf length (Lazy.force Imp.hole_values)

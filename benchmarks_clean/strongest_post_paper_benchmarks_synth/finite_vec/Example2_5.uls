@@ -1,0 +1,3 @@
+[Int N : [0, (+ 1 Nonterm N), (+ -1 Nonterm N)] : Some ([] : (Hole : holeN [AInt e_t]))]
+        {|(and (= 1 x[1]) (= 2 x[2]))|} Stmt (:= x Nonterm N) {|(not (and (= 1 x[1]) (= 2 x[2])))|}
+      

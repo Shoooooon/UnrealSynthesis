@@ -34,6 +34,7 @@ rule read =
   | "and" {AND}
   | "or" {OR}
   | "+" {PLUS}
+  | "*" {PLUS}
   | "-" {MINUS}
   | "=" {EQUALS}
   | ("bvult" | "<") {LESS}

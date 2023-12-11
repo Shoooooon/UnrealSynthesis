@@ -10,6 +10,16 @@ module type ImplicationHandler = sig
   val hole_values : ((string * variable list) * formula) list Lazy.t
 end
 
+(* Module for strategies for writing SyGuS grammars for the synthesis of hole values. *)
+module type HoleSynthStrat = sig
+  val bool_hole_to_sygus_grammar : string * variable list -> string
+end
+
+module type VCSimpStrat = sig
+  val deconjunctivizer : formula -> formula -> (formula * VS.t) list
+  val deconjunctivizer_rhs : formula -> VS.t -> (formula * VS.t) list * VS.t
+end
+
 (* Helper Functions *)
 (* Hole checking/manipulating functions *)
 let rec has_bholes form =
@@ -196,73 +206,85 @@ let rec get_bholes form =
          | _ -> raise (Bad_Deconjunct imp))
        final_forms *)
 
-(* Recursively pulls out \exists on LHS.
-   Returns the new formula as well as previously existentially quantified variables (or what they are renamed to). *)
-let rec deconjunctivizer_lhs form varset =
-  match form with
-  | Exists (v, body) ->
-      (* Exists on lhs is essentially a forall -- strip and make it a free variable *)
-      if List.mem (var_tostr v) (List.map var_tostr (VS.elements varset)) then
-        let newv_name =
-          fresh_var_name body (List.map var_tostr (VS.elements varset))
-        in
-        let newv = new_var_of_same_type v newv_name in
-        let newv_exp = var_to_exp newv in
-        let new_form, varset, existed =
-          deconjunctivizer_lhs (subs body v newv_exp) (VS.add newv varset)
-        in
-        (new_form, varset, VS.add newv existed)
-      else
-        let form, varset, existed =
-          deconjunctivizer_lhs body (VS.add v varset)
-        in
-        (form, varset, VS.add v existed)
-  (* We aren't dealing with implications on LHS -- too complicated and doesn't occur in the system. *)
-  (* For conjunctions, we might as well pull out \exists *)
-  | And (a, b) ->
-      let a_new, varset, a_existed = deconjunctivizer_lhs a varset in
-      let b_new, varset, b_existed = deconjunctivizer_lhs b varset in
-      (And (a_new, b_new), varset, VS.union a_existed b_existed)
-  | _ -> (form, varset, VS.empty)
+module No_Simp : VCSimpStrat = struct
+  (* Returns list of form * previously_existed_vars and set of active var names. *)
+  let deconjunctivizer_rhs form varset =
+    ([ (form, VS.empty) ], varset)
 
-(* Returns list of form * previously_existed_vars and set of active var names. *)
-let rec deconjunctivizer_rhs form varset =
-  match form with
-  | Forall (v, body) ->
-      (* Forall on rhs -- strip and make it a free variable *)
-      if List.mem (var_tostr v) (List.map var_tostr (VS.elements varset)) then
-        let newv_name =
-          fresh_var_name body (List.map var_tostr (VS.elements varset))
-        in
-        let newv = new_var_of_same_type v newv_name in
-        let newv_exp = var_to_exp newv in
-        deconjunctivizer_rhs (subs body v newv_exp) (VS.add newv varset)
-      else deconjunctivizer_rhs body (VS.add v varset)
-  | Implies (lhs, rhs) ->
-      (* For Implies, eval the lhs and rhs then take the product of the lists. *)
-      let lhs_new, varset, lhs_existed = deconjunctivizer_lhs lhs varset in
-      let rhs_news, varset = deconjunctivizer_rhs rhs varset in
-      ( List.map
-          (fun (rhs_partic, rhs_existed) ->
-            match rhs_partic with
-            | Implies (a, b) ->
-                (Implies (And (lhs_new, a), b), VS.union lhs_existed rhs_existed)
-            | _ ->
-                (Implies (lhs_new, rhs_partic), VS.union lhs_existed rhs_existed))
-          rhs_news,
-        varset )
-  | And (a, b) ->
-      (* For and, eval each side and produce a list -- one formula for each conclusion. *)
-      let a_new, varset = deconjunctivizer_rhs a varset in
-      let b_new, varset = deconjunctivizer_rhs b varset in
-      (List.append a_new b_new, varset)
-  | _ -> ([ (form, VS.empty) ], varset)
+  let deconjunctivizer pre post =
+    let form = Implies (pre, post) in
+    let frm_nd_existed, _ = deconjunctivizer_rhs form (free_vars form VS.empty) in
+    frm_nd_existed
+end
 
-let deconjunctivizer pre post =
-  let form = Implies (pre, post) in
-  let frm_nd_existed, _ = deconjunctivizer_rhs form (free_vars form VS.empty) in
-  frm_nd_existed
+module Quantify_Collect : VCSimpStrat = struct
+  (* Recursively pulls out \exists on LHS.
+    Returns the new formula as well as previously existentially quantified variables (or what they are renamed to). *)
+  let rec deconjunctivizer_lhs form varset =
+    match form with
+    | Exists (v, body) ->
+        (* Exists on lhs is essentially a forall -- strip and make it a free variable *)
+        if List.mem (var_tostr v) (List.map var_tostr (VS.elements varset)) then
+          let newv_name =
+            fresh_var_name body (List.map var_tostr (VS.elements varset))
+          in
+          let newv = new_var_of_same_type v newv_name in
+          let newv_exp = var_to_exp newv in
+          let new_form, varset, existed =
+            deconjunctivizer_lhs (subs body v newv_exp) (VS.add newv varset)
+          in
+          (new_form, varset, VS.add newv existed)
+        else
+          let form, varset, existed =
+            deconjunctivizer_lhs body (VS.add v varset)
+          in
+          (form, varset, VS.add v existed)
+    (* We aren't dealing with implications on LHS -- too complicated and doesn't occur in the system. *)
+    (* For conjunctions, we might as well pull out \exists *)
+    | And (a, b) ->
+        let a_new, varset, a_existed = deconjunctivizer_lhs a varset in
+        let b_new, varset, b_existed = deconjunctivizer_lhs b varset in
+        (And (a_new, b_new), varset, VS.union a_existed b_existed)
+    | _ -> (form, varset, VS.empty)
 
+  (* Returns list of form * previously_existed_vars and set of active var names. *)
+  let rec deconjunctivizer_rhs form varset =
+    match form with
+    | Forall (v, body) ->
+        (* Forall on rhs -- strip and make it a free variable *)
+        if List.mem (var_tostr v) (List.map var_tostr (VS.elements varset)) then
+          let newv_name =
+            fresh_var_name body (List.map var_tostr (VS.elements varset))
+          in
+          let newv = new_var_of_same_type v newv_name in
+          let newv_exp = var_to_exp newv in
+          deconjunctivizer_rhs (subs body v newv_exp) (VS.add newv varset)
+        else deconjunctivizer_rhs body (VS.add v varset)
+    | Implies (lhs, rhs) ->
+        (* For Implies, eval the lhs and rhs then take the product of the lists. *)
+        let lhs_new, varset, lhs_existed = deconjunctivizer_lhs lhs varset in
+        let rhs_news, varset = deconjunctivizer_rhs rhs varset in
+        ( List.map
+            (fun (rhs_partic, rhs_existed) ->
+              match rhs_partic with
+              | Implies (a, b) ->
+                  (Implies (And (lhs_new, a), b), VS.union lhs_existed rhs_existed)
+              | _ ->
+                  (Implies (lhs_new, rhs_partic), VS.union lhs_existed rhs_existed))
+            rhs_news,
+          varset )
+    | And (a, b) ->
+        (* For and, eval each side and produce a list -- one formula for each conclusion. *)
+        let a_new, varset = deconjunctivizer_rhs a varset in
+        let b_new, varset = deconjunctivizer_rhs b varset in
+        (List.append a_new b_new, varset)
+    | _ -> ([ (form, VS.empty) ], varset)
+
+  let deconjunctivizer pre post =
+    let form = Implies (pre, post) in
+    let frm_nd_existed, _ = deconjunctivizer_rhs form (free_vars form VS.empty) in
+    frm_nd_existed
+end
 (* WRITING *)
 (* Writing formulas to smt files *)
 let rec to_smt_helper_int_term int_term =
@@ -315,9 +337,10 @@ and to_smt_helper_bitv_term bitv_term =
         (to_smt_helper_bitv_term btv1)
         (to_smt_helper_bitv_term btv2)
   | BitvTHole (s, arg_list) ->
-    Printf.sprintf "(%s %s)" s
-      (String.concat " " (List.map to_smt_helper_exp arg_list))
+      Printf.sprintf "(%s %s)" s
+        (String.concat " " (List.map to_smt_helper_exp arg_list))
   | _ ->
+      (* print_endline (form_tostr (Equals (BitvTerm bitv_term, BitvTerm bitv_term)));   *)
       raise (Unsupported_Formula_Constructor 71)
 
 and to_smt_helper_term term =
@@ -373,8 +396,7 @@ and to_smt_helper form =
   | BHole (s, arg_list) ->
       Printf.sprintf "(%s %s)" s
         (String.concat " " (List.map to_smt_helper_exp arg_list))
-  | _ ->
-      raise (Unsupported_Formula_Constructor 2)
+  | _ -> raise (Unsupported_Formula_Constructor 2)
 
 and to_smt_helper_exp e =
   match e with Term t -> to_smt_helper_term t | Boolean b -> to_smt_helper b
@@ -528,7 +550,466 @@ let to_negated_smt_vampire form name =
        (free_vars form VS.empty) "")
     (to_smt_helper_vamp form)
 
-let to_sygus constraints bool_hole_list term_hole_list =
+module BitvecGrammarStrat : HoleSynthStrat = struct
+  (* let bool_hole_to_sygus_grammar (_, sl) =
+    if
+      List.exists
+        (fun x -> match x with BitvTermVar _ -> false | _ -> true)
+        sl
+    then ""
+    else
+      let lock_nonterm_body = ref "true" in
+      (* If e_t is every other entry *)
+      if List.length sl mod 2 = 0 then (
+        let evens = List.filteri (fun i _ -> i mod 2 = 0) sl
+        and odds = List.filteri (fun i _ -> i mod 2 = 1) sl in
+        List.iter
+          (fun bit ->
+            List.iter
+              (fun (od, ev) ->
+                lock_nonterm_body :=
+                  !lock_nonterm_body
+                  ^ Printf.sprintf
+                      "(=> (bvult #x00000000 (bvand %s %s)) (bvult #x00000000 \
+                       (bvand %s %s)))\n"
+                      (var_tostr od) bit (var_tostr ev) bit)
+              (List.combine odds evens))
+          [
+            "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+          ];
+        List.iter
+          (fun bit ->
+            List.iter
+              (fun (od, ev) ->
+                lock_nonterm_body :=
+                  !lock_nonterm_body
+                  ^ Printf.sprintf
+                      "(=> (not (bvult #x00000000 (bvand %s %s))) (bvult \
+                       #x00000000 (bvand %s %s)))\n"
+                      (var_tostr od) bit (var_tostr ev) bit)
+              (List.combine odds evens))
+          [
+            "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+          ];
+        List.iter
+          (fun bit ->
+            List.iter
+              (fun (od, ev) ->
+                lock_nonterm_body :=
+                  !lock_nonterm_body
+                  ^ Printf.sprintf
+                      "(=> (bvult #x00000000 (bvand %s %s)) (not (bvult \
+                       #x00000000 (bvand %s %s))))\n"
+                      (var_tostr od) bit (var_tostr ev) bit)
+              (List.combine odds evens))
+          [
+            "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+          ];
+        List.iter
+          (fun bit ->
+            List.iter
+              (fun (od, ev) ->
+                lock_nonterm_body :=
+                  !lock_nonterm_body
+                  ^ Printf.sprintf
+                      "(=> (not (bvult #x00000000 (bvand %s %s))) (not (bvult \
+                       #x00000000 (bvand %s %s))))\n"
+                      (var_tostr od) bit (var_tostr ev) bit)
+              (List.combine odds evens))
+          [
+            "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+          ])
+      else ();
+      (* If e_t is every third entry *)
+      if List.length sl mod 3 = 0 then (
+        let zeros = List.filteri (fun i _ -> i mod 3 = 0) sl
+        and ones = List.filteri (fun i _ -> i mod 3 = 1) sl
+        and twos = List.filteri (fun i _ -> i mod 3 = 2) sl in
+        List.iter
+          (fun bit ->
+            List.iter
+              (fun ((zero, one), two) ->
+                lock_nonterm_body :=
+                  !lock_nonterm_body
+                  ^ Printf.sprintf
+                      "(=> (and (bvult #x00000000 (bvand %s %s)) (bvult \
+                       #x00000000 (bvand %s %s))) (bvult #x00000000 (bvand %s \
+                       %s)))\n"
+                      (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
+                      bit)
+              (List.combine (List.combine zeros ones) twos))
+          [
+            "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+          ];
+        List.iter
+          (fun bit ->
+            List.iter
+              (fun ((zero, one), two) ->
+                lock_nonterm_body :=
+                  !lock_nonterm_body
+                  ^ Printf.sprintf
+                      "(=> (and (bvult #x00000000 (bvand %s %s)) (bvult \
+                       #x00000000 (bvand %s %s))) (not (bvult #x00000000 \
+                       (bvand %s %s))))\n"
+                      (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
+                      bit)
+              (List.combine (List.combine zeros ones) twos))
+          [
+            "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+          ];
+        List.iter
+          (fun bit ->
+            List.iter
+              (fun ((zero, one), two) ->
+                lock_nonterm_body :=
+                  !lock_nonterm_body
+                  ^ Printf.sprintf
+                      "(=> (and (bvult #x00000000 (bvand %s %s)) (not (bvult \
+                       #x00000000 (bvand %s %s)))) (bvult #x00000000 (bvand %s \
+                       %s)))\n"
+                      (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
+                      bit)
+              (List.combine (List.combine zeros ones) twos))
+          [
+            "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+          ];
+        List.iter
+          (fun bit ->
+            List.iter
+              (fun ((zero, one), two) ->
+                lock_nonterm_body :=
+                  !lock_nonterm_body
+                  ^ Printf.sprintf
+                      "(=> (and (bvult #x00000000 (bvand %s %s)) (not (bvult \
+                       #x00000000 (bvand %s %s)))) (not (bvult #x00000000 \
+                       (bvand %s %s))))\n"
+                      (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
+                      bit)
+              (List.combine (List.combine zeros ones) twos))
+          [
+            "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+          ];
+        List.iter
+          (fun bit ->
+            List.iter
+              (fun ((zero, one), two) ->
+                lock_nonterm_body :=
+                  !lock_nonterm_body
+                  ^ Printf.sprintf
+                      "(=> (and (not (bvult #x00000000 (bvand %s %s))) (bvult \
+                       #x00000000 (bvand %s %s))) (bvult #x00000000 (bvand %s \
+                       %s)))\n"
+                      (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
+                      bit)
+              (List.combine (List.combine zeros ones) twos))
+          [
+            "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+          ];
+        List.iter
+          (fun bit ->
+            List.iter
+              (fun ((zero, one), two) ->
+                lock_nonterm_body :=
+                  !lock_nonterm_body
+                  ^ Printf.sprintf
+                      "(=> (and (not (bvult #x00000000 (bvand %s %s))) (bvult \
+                       #x00000000 (bvand %s %s))) (not (bvult #x00000000 \
+                       (bvand %s %s))))\n"
+                      (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
+                      bit)
+              (List.combine (List.combine zeros ones) twos))
+          [
+            "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+          ];
+        List.iter
+          (fun bit ->
+            List.iter
+              (fun ((zero, one), two) ->
+                lock_nonterm_body :=
+                  !lock_nonterm_body
+                  ^ Printf.sprintf
+                      "(=> (and (not (bvult #x00000000 (bvand %s %s))) (not \
+                       (bvult #x00000000 (bvand %s %s)))) (bvult #x00000000 \
+                       (bvand %s %s)))\n"
+                      (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
+                      bit)
+              (List.combine (List.combine zeros ones) twos))
+          [
+            "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+          ];
+        List.iter
+          (fun bit ->
+            List.iter
+              (fun ((zero, one), two) ->
+                lock_nonterm_body :=
+                  !lock_nonterm_body
+                  ^ Printf.sprintf
+                      "(=> (and (not (bvult #x00000000 (bvand %s %s))) (not \
+                       (bvult #x00000000 (bvand %s %s)))) (not (bvult \
+                       #x00000000 (bvand %s %s))))\n"
+                      (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
+                      bit)
+              (List.combine (List.combine zeros ones) twos))
+          [
+            "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+          ])
+      else ();
+      ";; Declare the non-terminals that would be used in the grammar\n\
+      \    ((DisjOpt Bool) (NegOpt Bool) (Lock Bool)\n\
+      \     )\n\n\
+      \    ;; Define the grammar \n\
+      \     ((DisjOpt Bool (NegOpt (or NegOpt DisjOpt)))\n\
+      \     (NegOpt Bool (Lock (not Lock)))\n\
+      \     (Lock Bool (" ^ !lock_nonterm_body ^ ")))" *)
+
+      let bool_hole_to_sygus_grammar (_, sl) =
+        if
+          List.exists
+            (fun x -> match x with BitvTermVar _ -> false | _ -> true)
+            sl
+        then ""
+        else
+          let lock_nonterm_body = ref "true" in
+          (* If e_t is every other entry *)
+          if List.length sl mod 2 = 0 then (
+            let evens = List.filteri (fun i _ -> i mod 2 = 0) sl
+            and odds = List.filteri (fun i _ -> i mod 2 = 1) sl in
+            (List.iter
+                (fun bit ->
+                  lock_nonterm_body :=
+                      !lock_nonterm_body
+                      ^ Printf.sprintf "%s\n"
+                  (List.fold_left
+                    (fun frm_str (od, ev) ->
+                      Printf.sprintf "(and %s %s)" frm_str
+                        (Printf.sprintf "(=> (bvult #x00000000 (bvand %s %s)) (bvult #x00000000 \
+                          (bvand %s %s)))"
+                          (var_tostr od) bit (var_tostr ev) bit))
+                    "true" (List.combine odds evens)))
+                  [
+                  "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+                  ]);
+              (List.iter
+                (fun bit ->
+                  lock_nonterm_body :=
+                      !lock_nonterm_body
+                      ^ Printf.sprintf "%s\n"
+                  (List.fold_left
+                    (fun frm_str (od, ev) ->
+                      Printf.sprintf "(and %s %s)" frm_str
+                        (Printf.sprintf "(=> (not (bvult #x00000000 (bvand %s %s))) (bvult #x00000000 \
+                          (bvand %s %s)))"
+                          (var_tostr od) bit (var_tostr ev) bit))
+                    "true" (List.combine odds evens)))
+                  [
+                  "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+                  ]);
+              (List.iter
+                (fun bit ->
+                  lock_nonterm_body :=
+                      !lock_nonterm_body
+                      ^ Printf.sprintf "%s\n"
+                  (List.fold_left
+                    (fun frm_str (od, ev) ->
+                      Printf.sprintf "(and %s %s)" frm_str
+                        (Printf.sprintf "(=> (bvult #x00000000 (bvand %s %s)) (not (bvult #x00000000 \
+                          (bvand %s %s))))"
+                          (var_tostr od) bit (var_tostr ev) bit))
+                    "true" (List.combine odds evens)))
+                  [
+                  "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+                  ]);
+              (List.iter
+                (fun bit ->
+                  lock_nonterm_body :=
+                      !lock_nonterm_body
+                      ^ Printf.sprintf "%s\n"
+                  (List.fold_left
+                    (fun frm_str (od, ev) ->
+                      Printf.sprintf "(and %s %s)" frm_str
+                        (Printf.sprintf "(=> (not (bvult #x00000000 (bvand %s %s))) (not (bvult #x00000000 \
+                          (bvand %s %s))))"
+                          (var_tostr od) bit (var_tostr ev) bit))
+                    "true" (List.combine odds evens)))
+                  [
+                  "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+                  ])
+            )
+          else ();
+          (* If e_t is every third entry *)
+          if List.length sl mod 3 = 0 then (
+            let zeros = List.filteri (fun i _ -> i mod 3 = 0) sl
+            and ones = List.filteri (fun i _ -> i mod 3 = 1) sl
+            and twos = List.filteri (fun i _ -> i mod 3 = 2) sl in
+            List.iter
+              (fun bit ->
+                lock_nonterm_body :=
+                      !lock_nonterm_body
+                      ^ (Printf.sprintf "%s\n"
+                (List.fold_left
+                  (fun frm_str ((zero, one), two) ->
+                    Printf.sprintf "(and %s %s)" frm_str  
+                     (Printf.sprintf
+                          "(=> (and (bvult #x00000000 (bvand %s %s)) (bvult \
+                           #x00000000 (bvand %s %s))) (bvult #x00000000 (bvand %s \
+                           %s)))\n"
+                          (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
+                          bit))
+                          "true"
+                  (List.combine (List.combine zeros ones) twos))))
+              [
+                "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+              ];
+              List.iter
+              (fun bit ->
+                lock_nonterm_body :=
+                      !lock_nonterm_body
+                      ^ (Printf.sprintf "%s\n"
+                (List.fold_left
+                  (fun frm_str ((zero, one), two) ->
+                    Printf.sprintf "(and %s %s)" frm_str  
+                     (Printf.sprintf
+                          "(=> (and (bvult #x00000000 (bvand %s %s)) (bvult \
+                           #x00000000 (bvand %s %s))) (not (bvult #x00000000 (bvand %s \
+                           %s))))\n"
+                          (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
+                          bit))
+                          "true"
+                  (List.combine (List.combine zeros ones) twos))))
+              [
+                "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+              ];
+              List.iter
+              (fun bit ->
+                lock_nonterm_body :=
+                      !lock_nonterm_body
+                      ^ (Printf.sprintf "%s\n"
+                (List.fold_left
+                  (fun frm_str ((zero, one), two) ->
+                    Printf.sprintf "(and %s %s)" frm_str  
+                     (Printf.sprintf
+                          "(=> (and (bvult #x00000000 (bvand %s %s)) (not (bvult \
+                           #x00000000 (bvand %s %s)))) (bvult #x00000000 (bvand %s \
+                           %s)))\n"
+                          (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
+                          bit))
+                          "true"
+                  (List.combine (List.combine zeros ones) twos))))
+              [
+                "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+              ];
+              List.iter
+              (fun bit ->
+                lock_nonterm_body :=
+                      !lock_nonterm_body
+                      ^ (Printf.sprintf "%s\n"
+                (List.fold_left
+                  (fun frm_str ((zero, one), two) ->
+                    Printf.sprintf "(and %s %s)" frm_str  
+                     (Printf.sprintf
+                          "(=> (and (bvult #x00000000 (bvand %s %s)) (not (bvult \
+                           #x00000000 (bvand %s %s)))) (not (bvult #x00000000 (bvand %s \
+                           %s))))\n"
+                          (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
+                          bit))
+                          "true"
+                  (List.combine (List.combine zeros ones) twos))))
+              [
+                "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+              ];            
+              List.iter
+              (fun bit ->
+                lock_nonterm_body :=
+                      !lock_nonterm_body
+                      ^ (Printf.sprintf "%s\n"
+                (List.fold_left
+                  (fun frm_str ((zero, one), two) ->
+                    Printf.sprintf "(and %s %s)" frm_str  
+                     (Printf.sprintf
+                          "(=> (and (not (bvult #x00000000 (bvand %s %s))) (bvult \
+                           #x00000000 (bvand %s %s))) (bvult #x00000000 (bvand %s \
+                           %s)))\n"
+                          (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
+                          bit))
+                          "true"
+                  (List.combine (List.combine zeros ones) twos))))
+              [
+                "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+              ];
+              List.iter
+              (fun bit ->
+                lock_nonterm_body :=
+                      !lock_nonterm_body
+                      ^ (Printf.sprintf "%s\n"
+                (List.fold_left
+                  (fun frm_str ((zero, one), two) ->
+                    Printf.sprintf "(and %s %s)" frm_str  
+                     (Printf.sprintf
+                          "(=> (and (not (bvult #x00000000 (bvand %s %s))) (bvult \
+                           #x00000000 (bvand %s %s))) (not (bvult #x00000000 (bvand %s \
+                           %s))))\n"
+                          (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
+                          bit))
+                          "true"
+                  (List.combine (List.combine zeros ones) twos))))
+              [
+                "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+              ];
+              List.iter
+              (fun bit ->
+                lock_nonterm_body :=
+                      !lock_nonterm_body
+                      ^ (Printf.sprintf "%s\n"
+                (List.fold_left
+                  (fun frm_str ((zero, one), two) ->
+                    Printf.sprintf "(and %s %s)" frm_str  
+                     (Printf.sprintf
+                          "(=> (and (not (bvult #x00000000 (bvand %s %s))) (not (bvult \
+                           #x00000000 (bvand %s %s)))) (bvult #x00000000 (bvand %s \
+                           %s)))\n"
+                          (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
+                          bit))
+                          "true"
+                  (List.combine (List.combine zeros ones) twos))))
+              [
+                "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+              ];
+              List.iter
+              (fun bit ->
+                lock_nonterm_body :=
+                      !lock_nonterm_body
+                      ^ (Printf.sprintf "%s\n"
+                (List.fold_left
+                  (fun frm_str ((zero, one), two) ->
+                    Printf.sprintf "(and %s %s)" frm_str  
+                     (Printf.sprintf
+                          "(=> (and (not (bvult #x00000000 (bvand %s %s))) (not (bvult \
+                           #x00000000 (bvand %s %s)))) (not (bvult #x00000000 (bvand %s \
+                           %s))))\n"
+                          (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
+                          bit))
+                          "true"
+                  (List.combine (List.combine zeros ones) twos))))
+              [
+                "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+              ])
+          else ();
+          ";; Declare the non-terminals that would be used in the grammar\n\
+          \    ((DisjOpt Bool) (NegOpt Bool) (Lock Bool)\n\
+          \     )\n\n\
+          \    ;; Define the grammar \n\
+          \     ((DisjOpt Bool (NegOpt (or NegOpt DisjOpt)))\n\
+          \     (NegOpt Bool (Lock (not Lock)))\n\
+          \     (Lock Bool (" ^ !lock_nonterm_body ^ ")))"
+    
+  end
+
+module UnconstrainedGrammarStrat : HoleSynthStrat = struct
+  let bool_hole_to_sygus_grammar (_, _) = ""
+end
+
+let to_sygus constraints bool_hole_list term_hole_list
+    bool_hole_to_sygus_grammar_string logic_string =
   let f_vars =
     List.fold_left
       (fun set aconstraint -> VS.union set (free_vars aconstraint VS.empty))
@@ -555,7 +1036,7 @@ let to_sygus constraints bool_hole_list term_hole_list =
       (String.concat "\n"
          (List.map
             (fun (s, vl) ->
-              Printf.sprintf "(synth-fun %s (%s) Bool)" s
+              Printf.sprintf "(synth-fun %s (%s) Bool %s)" s
                 (String.concat " "
                    (List.map
                       (fun var ->
@@ -568,7 +1049,8 @@ let to_sygus constraints bool_hole_list term_hole_list =
                             Printf.sprintf "(%s (_ BitVec %d))" (var_tostr var)
                               Logic.Formula.bvconst
                         | _ -> raise (Unsupported_Formula_Constructor 7))
-                      vl)))
+                      vl))
+                (bool_hole_to_sygus_grammar_string (s, vl)))
             bool_hole_list))
   in
   let str3 =
@@ -601,7 +1083,7 @@ let to_sygus constraints bool_hole_list term_hole_list =
               Printf.sprintf "(constraint %s)" (to_smt_helper aconstraint))
             constraints))
   in
-  "(set-logic ALL)\n\n" ^ str1 ^ str2 ^ str3 ^ str4 ^ "(check-synth)"
+  (Printf.sprintf "(set-logic %s)\n\n" logic_string) ^ str1 ^ str2 ^ str3 ^ str4 ^ "(check-synth)"
 
 (* Utilities for discharging implications --
    The idea will be to spawn processes to invoke Z3 or whichever solver.
@@ -720,15 +1202,17 @@ let no_hole_simple_implicator_z3 () =
                 Term
                   (ITerm (THole (var_tostr hole_var, important_vars_as_exps)))
               )
-          | BitvTermVar _ -> 
+          | BitvTermVar _ ->
               ( hole_var,
                 Term
-                  (BitvTerm (BitvTHole (var_tostr hole_var, important_vars_as_exps)))
+                  (BitvTerm
+                     (BitvTHole (var_tostr hole_var, important_vars_as_exps)))
               )
           | ABitvTermVar _ ->
               ( hole_var,
                 Term
-                  (BitvTerm (BitvTHole (var_tostr hole_var, important_vars_as_exps)))
+                  (BitvTerm
+                     (BitvTHole (var_tostr hole_var, important_vars_as_exps)))
               )
           | BoolVar _ ->
               ( hole_var,
@@ -788,7 +1272,9 @@ let no_hole_simple_implicator_z3 () =
         (* Set up the file and record in the structure. *)
         let oc = open_out (Printf.sprintf "%s.sy" filename_pref) in
         let constraint_one, holes = backup_syguser form important_variables in
-        Printf.fprintf oc "%s" (to_sygus [ constraint_one ] [] holes);
+        (* TODO: Don't hardcode logic here. Later. When we can afford not to. *)
+        Printf.fprintf oc "%s"
+          (to_sygus [ constraint_one ] [] holes (fun _ -> "") "NIA");
         close_out oc;
         file_counter := !file_counter + 1;
         (* Fork and exec the backup sygus query. *)
@@ -921,7 +1407,8 @@ let no_hole_simple_implicator_z3 () =
    Logging discharged implications saves on repeat computations and consolidates synthesis constraints.
    Such an implication checking function must take a hyp:Formula and conclusion:Formula and return a bool lazy.
    TODO: Evaluating the synthesized holes breaks the environment; we may want to fix that so we can build gradual proofs? Or something?*)
-let implicator_hole_synth_cvc5 () =
+(* Takes a function that suggests grammars for holes. *)
+let implicator_hole_synth_cvc5 bool_hole_to_sygus_grammar deconjunctivizer_rhs =
   (* Create persistent context to track synthesis constraints. *)
   let constraint_logger = ref []
   (* and varset = ref VS.empty *)
@@ -994,7 +1481,8 @@ let implicator_hole_synth_cvc5 () =
           let filename_pref = Printf.sprintf "Synthesis%d" !file_counter in
           (* Set up the file. *)
           let oc = open_out (Printf.sprintf "%s.sy" filename_pref) in
-          Printf.fprintf oc "%s" (to_sygus !constraint_logger hole_list []);
+          Printf.fprintf oc "%s"
+            (to_sygus !constraint_logger hole_list [] bool_hole_to_sygus_grammar "ALL");
           close_out oc;
           (* Dispatch synthesis to solver *)
           (* Fork and exec a query *)
@@ -1008,7 +1496,10 @@ let implicator_hole_synth_cvc5 () =
             in
             Unix.dup2 fd Unix.stdout;
             Unix.execvp "cvc5"
-              (Array.of_list [ "cvc5"; Printf.sprintf "%s.sy" filename_pref ])
+              (Array.of_list
+                 [
+                   "cvc5"; Printf.sprintf "%s.sy" filename_pref;
+                 ])
             (* Wait. If can't synth, then record no solutions.
                 Else, record existenct of a solution, store solution, and return it as string (for now).
                 TODO: Parse string so a mapping is returned instead; the contents of the mapping can be subbed intop the proof. *))
@@ -1024,8 +1515,7 @@ let implicator_hole_synth_cvc5 () =
                   (fun (name, body) ->
                     (List.find (fun (h, _) -> h = name) hole_list, body))
                   (List.map
-                     (fun decl_str ->
-                       parse_cvc5_func_decl decl_str)
+                     (fun decl_str -> parse_cvc5_func_decl decl_str)
                      (Array.to_list
                         (Array.sub output 1 (Array.length output - 2))))
               in
@@ -1089,6 +1579,8 @@ let no_hole_vector_state_implicator_vampire () =
                "smtcomp";
                "--input_syntax";
                "smtlib2";
+               "-t";
+               "600s";
                Printf.sprintf "%s.smt" filename_pref;
              ]))
       else
@@ -1115,7 +1607,7 @@ let no_hole_vector_state_implicator_vampire () =
   no_hole_verify
 
 (* IMPLICATION MODULES *)
-module NoHoleSimpleImplicatorZ3 () : ImplicationHandler = struct
+module NoHoleSimpleImplicatorZ3 (VCSimp : VCSimpStrat) : ImplicationHandler = struct
   let base_verif = no_hole_simple_implicator_z3 ()
 
   let implies pre post =
@@ -1123,18 +1615,21 @@ module NoHoleSimpleImplicatorZ3 () : ImplicationHandler = struct
       (fun lazy_boolean (form, existed) ->
         lazy (Lazy.force lazy_boolean && Lazy.force (base_verif form existed)))
       (lazy true)
-      (deconjunctivizer pre post)
+      (VCSimp.deconjunctivizer pre post)
 
   let hole_values = lazy []
 end
 
-module HoleSynthSimpleImplicatorCVC5 () : ImplicationHandler = struct
-  let base_verif, hole_values = implicator_hole_synth_cvc5 ()
+module HoleSynthSimpleImplicatorCVC5 (SygusHoleGrammarStrat : HoleSynthStrat) (VCSimp : VCSimpStrat) :
+  ImplicationHandler = struct
+  let base_verif, hole_values =
+    implicator_hole_synth_cvc5 SygusHoleGrammarStrat.bool_hole_to_sygus_grammar VCSimp.deconjunctivizer_rhs
+
   let implies pre post = base_verif (Implies (pre, post))
   (* Deconjuncting for cvc5 takes place inside base_verif *)
 end
 
-module NoHoleVectorStateImplicatorVampire () : ImplicationHandler = struct
+module NoHoleVectorStateImplicatorVampire (VCSimp : VCSimpStrat) : ImplicationHandler = struct
   let base_verif = no_hole_vector_state_implicator_vampire ()
 
   let implies pre post =
@@ -1142,7 +1637,7 @@ module NoHoleVectorStateImplicatorVampire () : ImplicationHandler = struct
       (fun lazy_boolean (form, _) ->
         lazy (Lazy.force lazy_boolean && Lazy.force (base_verif form)))
       (lazy true)
-      (deconjunctivizer pre post)
+      (VCSimp.deconjunctivizer pre post)
 
   let hole_values = lazy []
 end
@@ -1328,7 +1823,7 @@ end
      | Term t -> Term (term_finite_vs_transformer t)
      | Boolean b -> Boolean (bool_finite_vs_transformer max_ind b) *)
 
-let finite_holeless_implicator max_ind =
+let finite_holeless_implicator max_ind deconjunctivizer=
   (module struct
     let base_verif = no_hole_simple_implicator_z3 ()
 
@@ -1344,9 +1839,10 @@ let finite_holeless_implicator max_ind =
     let hole_values = lazy []
   end : ImplicationHandler)
 
-let finite_holes_implicator max_ind =
+let finite_holes_implicator max_ind bool_hole_to_sygus_grammar vc_simp_deconj_rhs =
   (module struct
-    let base_verif, hole_values = implicator_hole_synth_cvc5 ()
+    let base_verif, hole_values =
+      implicator_hole_synth_cvc5 bool_hole_to_sygus_grammar vc_simp_deconj_rhs
 
     let implies pre post =
       base_verif

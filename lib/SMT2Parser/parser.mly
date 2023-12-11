@@ -30,6 +30,7 @@
 %token BVSUB
 %token BVNEG
 %token PLUS
+%token TIMES
 %token MINUS
 %token EQUALS
 %token IMPLIES
@@ -62,17 +63,24 @@ args:
 term:
   | i = INT {ITerm (Int i)}
   | s = STRING {(*WARNING: e_t case bad -- may want separate et names by type*)
-  if s = "e_t" then ITerm (ITVar ET) else (if (List.mem (Variable.IntTermVar (T s)) !variable_context) then ITerm (ITVar (T s)) 
-  (* else (if (List.mem (Variable.BitvTermVar (T s)) !variable_context) then BitvTerm (BitvTVar (T s)) *)
-  else raise Parse_Bad_BVar)}
+  if s = "e_t" 
+  then ITerm (ITVar ET) 
+  else (
+    if (List.mem (Variable.IntTermVar (T s)) !variable_context) 
+    then ITerm (ITVar (T s)) 
+    else (
+      if (List.mem (Variable.BitvTermVar (T s)) !variable_context) 
+      then BitvTerm (BitvTVar (T s)) 
+      else raise Parse_Bad_BVar))}
   | LEFT_PAREN MINUS t=term RIGHT_PAREN {match t with | ITerm n -> ITerm (Formula.Minus n) | _ -> raise Type_Mismatch}
   | LEFT_PAREN PLUS t1=term t2=term RIGHT_PAREN {match (t1, t2) with | ITerm n1, ITerm n2 -> ITerm (Formula.Plus (n1, n2)) | _ -> raise Type_Mismatch}
-  // | btv = BITV {BitvTerm (Bitv btv)}
-  // | LEFT_PAREN BVNEG t=term RIGHT_PAREN {match t with | BitvTerm btv -> BitvTerm (Formula.BitvUnarApp (Minus, btv)) | _ -> raise Type_Mismatch}
-  // | LEFT_PAREN BVADD t1=term t2=term RIGHT_PAREN {match (t1, t2) with | BitvTerm btv1, BitvTerm btv2 -> BitvTerm (Formula.BitvBinarApp (Plus, btv1, btv2)) | _ -> raise Type_Mismatch}
-  // | LEFT_PAREN BVSUB t1=term t2=term RIGHT_PAREN {match (t1, t2) with | BitvTerm btv1, BitvTerm btv2 -> BitvTerm (Formula.BitvBinarApp (Sub, btv1, btv2)) | _ -> raise Type_Mismatch}
-  // | LEFT_PAREN BVOR t1=term t2=term RIGHT_PAREN {match (t1, t2) with | BitvTerm btv1, BitvTerm btv2 -> BitvTerm (Formula.BitvBinarApp (Or, btv1, btv2)) | _ -> raise Type_Mismatch}
-  // | LEFT_PAREN BVAND t1=term t2=term RIGHT_PAREN {match (t1, t2) with | BitvTerm btv1, BitvTerm btv2 -> BitvTerm (Formula.BitvBinarApp (And, btv1, btv2)) | _ -> raise Type_Mismatch}
+  | LEFT_PAREN TIMES t1=term t2=term RIGHT_PAREN {match (t1, t2) with | ITerm n1, ITerm n2 -> ITerm (Formula.Times (n1, n2)) | _ -> raise Type_Mismatch}
+  | btv = BITV {BitvTerm (Bitv btv)}
+  | LEFT_PAREN BVNEG t=term RIGHT_PAREN {match t with | BitvTerm btv -> BitvTerm (Formula.BitvUnarApp (Minus, btv)) | _ -> raise Type_Mismatch}
+  | LEFT_PAREN BVADD t1=term t2=term RIGHT_PAREN {match (t1, t2) with | BitvTerm btv1, BitvTerm btv2 -> BitvTerm (Formula.BitvBinarApp (Plus, btv1, btv2)) | _ -> raise Type_Mismatch}
+  | LEFT_PAREN BVSUB t1=term t2=term RIGHT_PAREN {match (t1, t2) with | BitvTerm btv1, BitvTerm btv2 -> BitvTerm (Formula.BitvBinarApp (Sub, btv1, btv2)) | _ -> raise Type_Mismatch}
+  | LEFT_PAREN BVOR t1=term t2=term RIGHT_PAREN {match (t1, t2) with | BitvTerm btv1, BitvTerm btv2 -> BitvTerm (Formula.BitvBinarApp (Or, btv1, btv2)) | _ -> raise Type_Mismatch}
+  | LEFT_PAREN BVAND t1=term t2=term RIGHT_PAREN {match (t1, t2) with | BitvTerm btv1, BitvTerm btv2 -> BitvTerm (Formula.BitvBinarApp (And, btv1, btv2)) | _ -> raise Type_Mismatch}
 
 
 form_list :
@@ -105,6 +113,7 @@ exp:
   | i = INT {Term (ITerm (Int i))}
   | LEFT_PAREN MINUS t=term RIGHT_PAREN {match t with | ITerm n -> Term (ITerm (Formula.Minus n)) | _ -> raise Type_Mismatch}
   | LEFT_PAREN PLUS t1=term t2=term RIGHT_PAREN {match (t1, t2) with | ITerm n1, ITerm n2 -> Term (ITerm (Formula.Plus (n1, n2))) | _ -> raise Type_Mismatch}
+  | LEFT_PAREN TIMES t1=term t2=term RIGHT_PAREN {match (t1, t2) with | ITerm n1, ITerm n2 -> Term (ITerm (Formula.Times (n1, n2))) | _ -> raise Type_Mismatch}
   | btv = BITV {Term (BitvTerm (Bitv btv))}
   | LEFT_PAREN BVNEG t=term RIGHT_PAREN {match t with | BitvTerm btv -> Term (BitvTerm (Formula.BitvUnarApp (Minus, btv))) | _ -> raise Type_Mismatch}
   | LEFT_PAREN BVADD t1=term t2=term RIGHT_PAREN {match (t1, t2) with | BitvTerm btv1, BitvTerm btv2 -> Term (BitvTerm (Formula.BitvBinarApp (Plus, btv1, btv2))) | _ -> raise Type_Mismatch}

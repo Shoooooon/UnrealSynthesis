@@ -60,6 +60,7 @@ rule read =
   | ":" {COLON}
   | "{|" {LEFT_FORM_DEMARCATOR}
   | "|}" {RIGHT_FORM_DEMARCATOR}
+  | "skip" {SKIP}
   | "while" {WHILE}
   | "if" {IF}
   | "then" {THEN}

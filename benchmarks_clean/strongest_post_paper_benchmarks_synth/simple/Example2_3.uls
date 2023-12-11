@@ -1,0 +1,5 @@
+[Stmt S2 : [(:= x ( + x 2)), (; Nonterm S2 Nonterm S2)] : Some ([(Int x, Int x_2)] : (Hole : hole2 [Int x, Int x_2]) );
+Stmt S3 : [(:= x ( + x 3)), (; Nonterm S3 Nonterm S3)] : Some ([(Int x, Int x_2)] : (Hole : hole2 [Int x, Int x_2]) );
+Stmt Start : [Nonterm S2, Nonterm S3] : None]
+                   {|exists ((k Int)) (= (* 6 k) x )|} Stmt Nonterm Start {|(not exists ((k Int)) (= (+ 1 (* 6 k)) x ))|}
+                 

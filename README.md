@@ -1,6 +1,10 @@
+# WULDO
+Wuldo is a proof synthesizer for weakest-pre Unrealizability Logic. 
+Given a grammar, an unrealizability triple, and some optional invariants, Wuldo can synthesize a proof of the triple over the grammar.
+
 ## How to run
 
-To run, make sure z3, cvc5, and vampire are installed and callable from the command line as "z3", "cvc5", and "vampire" respectively. Then type the following:
+To run, make sure z3, cvc5, and vampire are installed and callable from the command line as "z3", "cvc5", and "vampire" respectively. Install dune as well. Specify your UL query as in the benchmarks files. Then type the following:
 
 > dune exec -- ULSynth \<filename\>
 

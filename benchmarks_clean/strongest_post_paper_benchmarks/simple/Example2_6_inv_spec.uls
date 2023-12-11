@@ -1,0 +1,2 @@
+[Stmt S : [(while (< x 100) {|exists ((k Int)) (= (* 2 k) x)|} (:= x (+ x 2))), (while (< x 100) {|exists ((k Int)) (= (* 3 k) x)|} (:= x (+ x 3)))] : None]
+          {|exists ((k Int)) (= (* 6 k) x )|} Stmt Nonterm S {|(not exists ((k Int)) (= (+ 1 (* 6 k)) x))|}

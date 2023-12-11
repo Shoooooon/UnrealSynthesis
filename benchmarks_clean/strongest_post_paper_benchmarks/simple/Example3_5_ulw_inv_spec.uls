@@ -1,0 +1,3 @@
+[Int N : [2, (+ 2 Nonterm N)] : Some ([(Int e_t, Int e_t_2)] : exists ((k Int)) (= (* 2 k) e_t))]
+        {|true|} Int Nonterm N {|(not (= 3 e_t))|}
+      

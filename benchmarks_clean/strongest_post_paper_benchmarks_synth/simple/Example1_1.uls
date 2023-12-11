@@ -1,0 +1,3 @@
+[Int N : [x, (+ 1 Nonterm N)] : Some ([] : (Hole : holeN [Int e_t, Int x]))]
+        {|(= 15 x)|} Stmt (:= y Nonterm N) {|(not (= 10 y))|}
+      

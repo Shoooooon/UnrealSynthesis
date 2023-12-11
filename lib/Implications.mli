@@ -9,10 +9,30 @@ module type ImplicationHandler = sig
   val hole_values : ((string * variable list) * formula) list Lazy.t
 end
 
-(* IMPLICATION MODULES *)
-module NoHoleSimpleImplicatorZ3 () : ImplicationHandler
-module HoleSynthSimpleImplicatorCVC5 () : ImplicationHandler
-module NoHoleVectorStateImplicatorVampire () : ImplicationHandler
+(* Module for strategies for writing SyGuS grammars for the synthesis of hole values. *)
+module type HoleSynthStrat = sig
+  val bool_hole_to_sygus_grammar : string * variable list -> string
+end
 
-val finite_holes_implicator : int -> (module ImplicationHandler)
-val finite_holeless_implicator : int -> (module ImplicationHandler)
+module type VCSimpStrat = sig
+  val deconjunctivizer : formula -> formula -> (formula * VS.t) list
+  val deconjunctivizer_rhs : formula -> VS.t -> (formula * VS.t) list * VS.t
+end
+
+(* Hole synthesis to sygus grammar options. *)
+module BitvecGrammarStrat : HoleSynthStrat
+module UnconstrainedGrammarStrat : HoleSynthStrat
+
+(* VC simplification options. *)
+module No_Simp : VCSimpStrat
+module Quantify_Collect : VCSimpStrat
+
+(* IMPLICATION MODULES *)
+module NoHoleSimpleImplicatorZ3 (_ : VCSimpStrat) : ImplicationHandler
+module HoleSynthSimpleImplicatorCVC5 (_ : HoleSynthStrat) (_ : VCSimpStrat) : ImplicationHandler
+module NoHoleVectorStateImplicatorVampire (_ : VCSimpStrat) : ImplicationHandler
+
+val finite_holes_implicator :
+  int -> (string * variable list -> string) -> (formula -> VS.t -> (formula * VS.t) list * VS.t) -> (module ImplicationHandler)
+
+val finite_holeless_implicator : int -> (formula -> formula -> (formula * VS.t) list) -> (module ImplicationHandler)

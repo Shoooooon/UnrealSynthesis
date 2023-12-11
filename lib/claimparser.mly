@@ -55,6 +55,7 @@
 %token IF
 %token THEN
 %token ELSE
+%token SKIP
 %token WHILE
 %token EXISTS
 %token FORALL
@@ -156,8 +157,8 @@ formula:
   | LEFT_PAREN LESS t1=form_int_term t2=form_int_term RIGHT_PAREN {Less (ITerm t1, ITerm t2)}
   | LEFT_PAREN BVLESS t1=form_bitv_term t2=form_bitv_term RIGHT_PAREN {Less (BitvTerm t1, BitvTerm t2)}
   | LEFT_PAREN LESS_EQUALS t1=form_int_term t2=form_int_term RIGHT_PAREN {Or (Less (ITerm t1, ITerm t2), Equals (ITerm t1, ITerm t2))}
-  | LEFT_PAREN GREATER t1=form_int_term t2=form_int_term RIGHT_PAREN {Less (ITerm t1, ITerm t2)}
-  | LEFT_PAREN GREATER_EQUALS t1=form_int_term t2=form_int_term RIGHT_PAREN {Or (Less (ITerm t1, ITerm t2), Equals (ITerm t1, ITerm t2))}
+  | LEFT_PAREN GREATER t1=form_int_term t2=form_int_term RIGHT_PAREN {Less (ITerm t2, ITerm t1)}
+  | LEFT_PAREN GREATER_EQUALS t1=form_int_term t2=form_int_term RIGHT_PAREN {Or (Less (ITerm t2, ITerm t1), Equals (ITerm t1, ITerm t2))}
   | EXISTS quants=form_args_list body=formula {(List.fold_left make_exists body quants)} 
   | FORALL quants=form_args_list body=formula {(List.fold_left make_forall body quants)} 
 
@@ -166,6 +167,7 @@ formula:
 prog_num: 
   | i = INT {fun _ -> Int i}
   | LEFT_PAREN PLUS n1=prog_num n2=prog_num RIGHT_PAREN {fun gram -> Plus ((n1 gram), (n2 gram))}
+  | LEFT_PAREN MINUS n=prog_num RIGHT_PAREN {fun gram -> Minus ((n gram))}
   | LEFT_PAREN IF b=prog_bool THEN n1=prog_num ELSE n2=prog_num RIGHT_PAREN {fun gram -> ITE ((b gram), (n1 gram), (n2 gram))}
   | NT_KWD s = STRING {fun gram -> (if (List.exists (fun n -> (Programs.NonTerminal.name n)= s) (Lazy.force gram).grammar_num)
     then (NNTerm (List.find (fun n -> (Programs.NonTerminal.name n) = s) (Lazy.force gram).grammar_num)) 
@@ -205,11 +207,12 @@ prog_bool:
     }
 
 prog_stmt:
+  | SKIP {fun _ -> Skip}
   | LEFT_PAREN ASSIGN s=STRING t=prog_num RIGHT_PAREN {fun gram -> Assign (s, Numeric (t gram))}
   | LEFT_PAREN BVASSIGN s=STRING t=prog_bitv RIGHT_PAREN {fun gram -> Assign (s, Bitvec (t gram))}
   | LEFT_PAREN SEMICOLON s1=prog_stmt s2=prog_stmt RIGHT_PAREN {fun gram -> Seq ((s1 gram), (s2 gram))}
   | LEFT_PAREN IF b=prog_bool THEN s1=prog_stmt ELSE s2=prog_stmt RIGHT_PAREN {fun gram -> ITE ((b gram), (s1 gram), (s2 gram))}
-  | LEFT_PAREN WHILE b=prog_bool LEFT_FORM_DEMARCATOR f=formula RIGHT_FORM_DEMARCATOR s=prog_stmt RIGHT_PAREN {fun gram -> While ((b gram), f, (s gram))}
+  | LEFT_PAREN WHILE b=prog_bool LEFT_FORM_DEMARCATOR f=formula_or_hole RIGHT_FORM_DEMARCATOR s=prog_stmt RIGHT_PAREN {fun gram -> While ((b gram), f, (s gram))}
   | NT_KWD s = STRING {fun gram -> (if (List.exists (fun st -> (Programs.NonTerminal.name st) = s) (Lazy.force gram).grammar_stmt)
     then SNTerm (List.find (fun st -> (Programs.NonTerminal.name st) = s) (Lazy.force gram).grammar_stmt)
     else SNTerm ({name=s; expansions=lazy []; strongest=lazy None}))

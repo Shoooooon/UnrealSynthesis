@@ -1,0 +1,3 @@
+[Stmt S : [(if (< 0 y) then (:= y (+ y -1)) else (:= y y))] : Some ([(AInt y, AInt y_2)] : exists ((k Int) (n Int)) forall ((i Int)) (< (+ y_2[i] (- n)) y[i]))]
+      {|forall ((i Int)) (= y[i] i)|} Stmt Nonterm S {|exists ((i Int)) (and (< 0 i) (not (= 0 y[i])))|}
+      

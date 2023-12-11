@@ -1,5 +1,0 @@
-[Bool B 
-    : [(= x 1), (or Nonterm B (= x 0))] 
-    : Some ([(Int e_t, Int e_t_2) ; (Bool b_t, Bool b_t_2)] : (Hole : hole [Bool b_t, Int x]))]
-
-{|(= x 1)|} Bool Nonterm B {|b_t|}

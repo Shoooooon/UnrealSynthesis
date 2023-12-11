@@ -1,0 +1,4 @@
+[Int E : [x, y, (+ Nonterm E Nonterm E), (+ Nonterm E (- Nonterm E))] : Some ([(Int e_t, Int e_t_2)] : (=> exists ((kx Int) (ky Int)) (and (= x (+ kx kx)) (= y (+ ky ky))) exists ((k Int)) (= e_t (+ k k))) );
+      Stmt S : [(:= x Nonterm E), (:= y Nonterm E), (; Nonterm S Nonterm S)] : Some ([(Int x, Int x_2); (Int y, Int y_2)] : (=> exists ((kx Int) (ky Int)) (and (= x_2 (+ kx kx)) (= y_2 (+ ky ky))) exists ((kx Int) (ky Int)) (and (= x (+ kx kx)) (= y (+ ky ky)))))]
+              {|(and (= x 2) (= y 0))|} Stmt (while (< Nonterm E Nonterm E) {|exists ((kx Int) (ky Int)) (and (= x (+ kx kx)) (= y (+ ky ky)))|} Nonterm S) {|(not (= y 3))|}
+            

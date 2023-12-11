@@ -1,0 +1,3 @@
+[Bitvec E : [x, y, (bvadd Nonterm E Nonterm E), (bvsub Nonterm E Nonterm E)] : Some ([(ABitvec e_t, ABitvec
+          e_t_2)] : (=> (and (bv= x[1] #x00000004) (bv= y[1] #x00000004)) (bv= #x00000000 (bvand e_t[1] #x00000003))))]
+          {|(and (bv= x[1] #x00000004) (bv= y[1] #x00000004))|} Bitvec Nonterm E {|(not (bv= e_t[1] #x00000003))|}
