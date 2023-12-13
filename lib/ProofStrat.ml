@@ -1374,6 +1374,15 @@ let ite_vector_state_stmt = ite_vector_state_template (fun x -> Stmt x)
 let while_simple b inv s (ctrip : contextualized_triple_no_pre) build_pf implies
     =
   let trip = ctrip.trip in
+  (* Add free vars in Q to invariant if invariant is a hole. *)
+  let inv = 
+    match inv with
+    | BHole(s, vars) -> 
+      (let newvars = VS.elements (VS.filter (fun x -> (List.for_all (fun y -> (var_to_exp x) <> y) vars)) (free_vars trip.post VS.empty)) in
+      let name = (List.fold_left (fun str var -> Printf.sprintf "%s_%s" str (var_tostr var)) s newvars) in
+      BHole(name, (List.append vars (List.map var_to_exp newvars))))
+    | _ -> inv 
+  in
   let body_hyp =
     build_pf
       { context = ctrip.context; trip = { prog = Stmt s; post = inv } }

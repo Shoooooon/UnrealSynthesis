@@ -214,7 +214,7 @@ prog_stmt:
   | LEFT_PAREN BVASSIGN s=STRING t=prog_bitv RIGHT_PAREN {fun gram -> Assign (s, Bitvec (t gram))}
   | LEFT_PAREN SEMICOLON s1=prog_stmt s2=prog_stmt RIGHT_PAREN {fun gram -> Seq ((s1 gram), (s2 gram))}
   | LEFT_PAREN IF b=prog_bool THEN s1=prog_stmt ELSE s2=prog_stmt RIGHT_PAREN {fun gram -> ITE ((b gram), (s1 gram), (s2 gram))}
-  | LEFT_PAREN WHILE b=prog_bool LEFT_FORM_DEMARCATOR f=formula_or_hole RIGHT_FORM_DEMARCATOR s=prog_stmt RIGHT_PAREN {fun gram -> While ((b gram), f, (s gram))}
+  | LEFT_PAREN WHILE b=prog_bool LEFT_FORM_DEMARCATOR f=while_formula_or_hole_or_autohole RIGHT_FORM_DEMARCATOR s=prog_stmt RIGHT_PAREN {fun gram -> While ((b gram), (f ((b gram), (s gram))), (s gram))}
   | NT_KWD s = STRING {fun gram -> (if (List.exists (fun st -> (Programs.NonTerminal.name st) = s) (Lazy.force gram).grammar_stmt)
     then SNTerm (List.find (fun st -> (Programs.NonTerminal.name st) = s) (Lazy.force gram).grammar_stmt)
     else SNTerm ({name=s; expansions=lazy []; strongest=lazy None;}))
@@ -283,7 +283,7 @@ strongest:
       (fun lst x -> ((List.cons 
       (x, (new_var_of_same_type x (fresh_var_name True (List.map var_tostr (List.append (List.map snd lst) (List.append all_vars x_set))))))
       lst
-      )) 
+      ))) 
       [] x_set) in
       
       Some (x_z_set, BHole((Printf.sprintf "%s_hole" name), (List.map 
@@ -297,7 +297,7 @@ strongest:
       (fun lst x -> ((List.cons 
       (x, (new_var_of_same_type x (fresh_var_name True (List.map var_tostr (List.append (List.map snd lst) (List.append all_vars x_set))))))
       lst
-      )) 
+      )))
       [] x_set) in
       
       Some (x_z_set, BHole((Printf.sprintf "%s_hole" name), (List.map 
@@ -338,6 +338,23 @@ var:
   | ARRAY_BOOL_KWD s1=STRING {ABoolVar (B s1)}
   | ARRAY_BOOL_KWD BT {ABoolVar BT}
   
+while_formula_or_hole_or_autohole:
+  | LEFT_PAREN AUTO_KWD COLON name=STRING RIGHT_PAREN {fun (b, s) -> 
+      let all_vars = VS.elements (VS.remove (BoolVar BT) (VS.union (get_program_vars (Boolean b)) (get_program_vars (Stmt s)))) in
+      BHole(name, (List.map 
+        var_to_exp
+        all_vars))
+    }
+  | LEFT_PAREN ARRAY_AUTO_KWD COLON name=STRING RIGHT_PAREN {fun (b, s) -> 
+      let all_vars = VS.elements (VS.remove (BoolVar BT) (VS.union (get_program_vars (Boolean b)) (get_program_vars (Stmt s)))) in
+      BHole(name,  (List.map 
+        (fun v -> (var_to_exp (to_array_var v)))
+        all_vars))
+    }
+  | LEFT_PAREN HOLE_KWD COLON s=STRING vl=vars_list RIGHT_PAREN {fun _ -> BHole (s, vl)}
+  | f=formula {fun _ -> f}
+
+
 formula_or_hole:
   | LEFT_PAREN HOLE_KWD COLON s=STRING vl=vars_list RIGHT_PAREN {BHole (s, vl)}
   | f=formula {f}
