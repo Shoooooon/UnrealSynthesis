@@ -1,7 +1,9 @@
 open Proofrules.ProofRule
 open ULSynth.ProofStrat
 
-let usage_msg = "ULSynth [-holes] [-hole-template] [-vectors] [-no-vc-simplify] <file1>"
+let usage_msg =
+  "ULSynth [-holes] [-hole-template] [-vectors] [-no-vc-simplify] <file1>"
+
 let holes = ref INVS_SPECIFIED
 let vectors = ref SIMPLE
 let sygus_template = ref NONE
@@ -33,7 +35,8 @@ let speclist =
       "Set this flag if you have holes in your specification." );
     ( "-no-vc-simplify",
       Arg.Unit (fun _ -> vc_simp := NO_SIMP),
-      "Set this flag if you would like to disnable quantifier collection to simply verification conditions before discharging them." );
+      "Set this flag if you would like to disnable quantifier collection to \
+       simply verification conditions before discharging them." );
     ( "-concise",
       Arg.Set concise,
       "Set this flag if want output 'proven' or 'unproven' instead of a \

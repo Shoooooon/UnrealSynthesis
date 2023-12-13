@@ -1065,152 +1065,157 @@ let term_finite_vs_transformer term =
   | BitvTerm bitv -> BitvTerm (bitv_term_finite_vs_transformer bitv)
 
 let rec bool_finite_vs_transformer max_ind form =
-  if max_ind = 0 then form else
-  (match form with
-  | ABVar (BApp (BT, Int i)) -> BVar (B (indexer "b_t" i))
-  | ABVar (BApp (B v, Int i)) -> BVar (B (indexer v i))
-  | And (f1, f2) ->
-      And
-        ( bool_finite_vs_transformer max_ind f1,
-          bool_finite_vs_transformer max_ind f2 )
-  | Or (f1, f2) ->
-      Or
-        ( bool_finite_vs_transformer max_ind f1,
-          bool_finite_vs_transformer max_ind f2 )
-  | Not f -> Not (bool_finite_vs_transformer max_ind f)
-  | Implies (f1, f2) ->
-      Implies
-        ( bool_finite_vs_transformer max_ind f1,
-          bool_finite_vs_transformer max_ind f2 )
-  | Equals (t1, t2) ->
-      Equals (term_finite_vs_transformer t1, term_finite_vs_transformer t2)
-  | Less (t1, t2) ->
-      Less (term_finite_vs_transformer t1, term_finite_vs_transformer t2)
-  | Iff (f1, f2) ->
-      Iff
-        ( bool_finite_vs_transformer max_ind f1,
-          bool_finite_vs_transformer max_ind f2 )
-  | Exists (v, f) -> (
-      match v with
-      | IntTermVar _ -> Exists (v, bool_finite_vs_transformer max_ind f)
-      | BitvTermVar _ -> Exists (v, bool_finite_vs_transformer max_ind f)
-      | BoolVar _ -> Exists (v, bool_finite_vs_transformer max_ind f)
-      | AIntTermVar (T t) ->
+  if max_ind = 0 then form
+  else
+    match form with
+    | ABVar (BApp (BT, Int i)) -> BVar (B (indexer "b_t" i))
+    | ABVar (BApp (B v, Int i)) -> BVar (B (indexer v i))
+    | And (f1, f2) ->
+        And
+          ( bool_finite_vs_transformer max_ind f1,
+            bool_finite_vs_transformer max_ind f2 )
+    | Or (f1, f2) ->
+        Or
+          ( bool_finite_vs_transformer max_ind f1,
+            bool_finite_vs_transformer max_ind f2 )
+    | Not f -> Not (bool_finite_vs_transformer max_ind f)
+    | Implies (f1, f2) ->
+        Implies
+          ( bool_finite_vs_transformer max_ind f1,
+            bool_finite_vs_transformer max_ind f2 )
+    | Equals (t1, t2) ->
+        Equals (term_finite_vs_transformer t1, term_finite_vs_transformer t2)
+    | Less (t1, t2) ->
+        Less (term_finite_vs_transformer t1, term_finite_vs_transformer t2)
+    | Iff (f1, f2) ->
+        Iff
+          ( bool_finite_vs_transformer max_ind f1,
+            bool_finite_vs_transformer max_ind f2 )
+    | Exists (v, f) -> (
+        match v with
+        | IntTermVar _ -> Exists (v, bool_finite_vs_transformer max_ind f)
+        | BitvTermVar _ -> Exists (v, bool_finite_vs_transformer max_ind f)
+        | BoolVar _ -> Exists (v, bool_finite_vs_transformer max_ind f)
+        | AIntTermVar (T t) ->
+            List.fold_left
+              (fun form i -> Exists (IntTermVar (T (indexer t i)), form))
+              (bool_finite_vs_transformer max_ind f)
+              (List.init max_ind (fun n -> n + 1))
+        | ABitvTermVar (T t) ->
+            List.fold_left
+              (fun form i -> Exists (BitvTermVar (T (indexer t i)), form))
+              (bool_finite_vs_transformer max_ind f)
+              (List.init max_ind (fun n -> n + 1))
+        | ABoolVar (B b) ->
+            List.fold_left
+              (fun form i -> Exists (BoolVar (B (indexer b i)), form))
+              (bool_finite_vs_transformer max_ind f)
+              (List.init max_ind (fun n -> n + 1))
+        | _ -> raise Unsupported_Output)
+    | Forall (v, f) -> (
+        match v with
+        | IntTermVar _ -> Forall (v, bool_finite_vs_transformer max_ind f)
+        | BitvTermVar _ -> Forall (v, bool_finite_vs_transformer max_ind f)
+        | BoolVar _ -> Forall (v, bool_finite_vs_transformer max_ind f)
+        | AIntTermVar (T t) ->
+            List.fold_left
+              (fun form i -> Forall (IntTermVar (T (indexer t i)), form))
+              (bool_finite_vs_transformer max_ind f)
+              (List.init max_ind (fun n -> n + 1))
+        | ABitvTermVar (T t) ->
+            List.fold_left
+              (fun form i -> Forall (BitvTermVar (T (indexer t i)), form))
+              (bool_finite_vs_transformer max_ind f)
+              (List.init max_ind (fun n -> n + 1))
+        | ABoolVar (B b) ->
+            List.fold_left
+              (fun form i -> Forall (BoolVar (B (indexer b i)), form))
+              (bool_finite_vs_transformer max_ind f)
+              (List.init max_ind (fun n -> n + 1))
+        | _ -> raise Unsupported_Output)
+    | BHole (h, arg_list) ->
+        let big_args_list =
+          List.concat
+            (List.init max_ind (fun n ->
+                 List.map
+                   (fun exp ->
+                     exp_finite_vs_transformer max_ind
+                       (set_exp_index exp (Int (n + 1))))
+                   arg_list))
+        in
+        BHole (h, big_args_list)
+    | T (f, b_loop, vmaps) ->
+        (* A list of (positive variables, formulas) for all 2^n combinations of bt[i] for the indices i appearing in t. If no indices appear, then it's just True.
+           E.g., [([1, 2], bloop[1] && bloop[2]], ([1], bloop[1] && !bloop[2]), ([2], !bloop[1] && bloop[2]), ([], !bloop[1] && !bloop[2])] *)
+        let t_guards =
           List.fold_left
-            (fun form i -> Exists (IntTermVar (T (indexer t i)), form))
-            (bool_finite_vs_transformer max_ind f)
+            (fun partial_perms_list index ->
+              List.append
+                (List.map
+                   (fun (pos_list, conj) ->
+                     ( pos_list,
+                       And (Not (ABVar (BApp (b_loop, Int index))), conj) ))
+                   partial_perms_list)
+                (List.map
+                   (fun (pos_list, conj) ->
+                     ( List.cons index pos_list,
+                       And (ABVar (BApp (b_loop, Int index)), conj) ))
+                   partial_perms_list))
+            [ ([], True) ]
             (List.init max_ind (fun n -> n + 1))
-      | ABitvTermVar (T t) ->
+        in
+        let expanded_hole = bool_finite_vs_transformer max_ind f in
+        let implied_subbed_holes =
+          List.map
+            (fun (off_inds, prec) ->
+              Implies
+                ( bool_finite_vs_transformer max_ind prec,
+                  List.fold_left
+                    (fun hole ind ->
+                      List.fold_left
+                        (fun hole (oldv, newv) ->
+                          subs hole
+                            (IntTermVar
+                               (T (indexer (var_tostr (AIntTermVar oldv)) ind)))
+                            (Term
+                               (ITerm
+                                  (ITVar
+                                     (T
+                                        (indexer
+                                           (var_tostr (AIntTermVar newv))
+                                           ind))))))
+                        (List.fold_left
+                           (fun hole (oldv, newv) ->
+                             subs hole
+                               (BitvTermVar
+                                  (T
+                                     (indexer
+                                        (var_tostr (ABitvTermVar oldv))
+                                        ind)))
+                               (Term
+                                  (BitvTerm
+                                     (BitvTVar
+                                        (T
+                                           (indexer
+                                              (var_tostr (ABitvTermVar newv))
+                                              ind))))))
+                           hole
+                           (VMap_ABitvT.bindings vmaps.bitv_map))
+                        (VMap_AIT.bindings vmaps.int_map))
+                    expanded_hole off_inds ))
+            t_guards
+        in
+        let conjoined_holes =
           List.fold_left
-            (fun form i -> Exists (BitvTermVar (T (indexer t i)), form))
-            (bool_finite_vs_transformer max_ind f)
-            (List.init max_ind (fun n -> n + 1))
-      | ABoolVar (B b) ->
-          List.fold_left
-            (fun form i -> Exists (BoolVar (B (indexer b i)), form))
-            (bool_finite_vs_transformer max_ind f)
-            (List.init max_ind (fun n -> n + 1))
-      | _ -> raise Unsupported_Output)
-  | Forall (v, f) -> (
-      match v with
-      | IntTermVar _ -> Forall (v, bool_finite_vs_transformer max_ind f)
-      | BitvTermVar _ -> Forall (v, bool_finite_vs_transformer max_ind f)
-      | BoolVar _ -> Forall (v, bool_finite_vs_transformer max_ind f)
-      | AIntTermVar (T t) ->
-          List.fold_left
-            (fun form i -> Forall (IntTermVar (T (indexer t i)), form))
-            (bool_finite_vs_transformer max_ind f)
-            (List.init max_ind (fun n -> n + 1))
-      | ABitvTermVar (T t) ->
-          List.fold_left
-            (fun form i -> Forall (BitvTermVar (T (indexer t i)), form))
-            (bool_finite_vs_transformer max_ind f)
-            (List.init max_ind (fun n -> n + 1))
-      | ABoolVar (B b) ->
-          List.fold_left
-            (fun form i -> Forall (BoolVar (B (indexer b i)), form))
-            (bool_finite_vs_transformer max_ind f)
-            (List.init max_ind (fun n -> n + 1))
-      | _ -> raise Unsupported_Output)
-  | BHole (h, arg_list) ->
-      let big_args_list =
-        List.concat
-          (List.init max_ind (fun n ->
-               List.map
-                 (fun exp ->
-                   exp_finite_vs_transformer max_ind
-                     (set_exp_index exp (Int (n + 1))))
-                 arg_list))
-      in
-      BHole (h, big_args_list)
-  | T (f, b_loop, vmaps) ->
-      (* A list of (positive variables, formulas) for all 2^n combinations of bt[i] for the indices i appearing in t. If no indices appear, then it's just True.
-         E.g., [([1, 2], bloop[1] && bloop[2]], ([1], bloop[1] && !bloop[2]), ([2], !bloop[1] && bloop[2]), ([], !bloop[1] && !bloop[2])] *)
-      let t_guards =
-        List.fold_left
-          (fun partial_perms_list index ->
-            List.append
-              (List.map
-                 (fun (pos_list, conj) ->
-                   (pos_list, And (Not (ABVar (BApp (b_loop, Int index))), conj)))
-                 partial_perms_list)
-              (List.map
-                 (fun (pos_list, conj) ->
-                   ( List.cons index pos_list,
-                     And (ABVar (BApp (b_loop, Int index)), conj) ))
-                 partial_perms_list))
-          [ ([], True) ]
-          (List.init max_ind (fun n -> n + 1))
-      in
-      let expanded_hole = bool_finite_vs_transformer max_ind f in
-      let implied_subbed_holes =
-        List.map
-          (fun (off_inds, prec) ->
-            Implies
-              ( bool_finite_vs_transformer max_ind prec,
-                List.fold_left
-                  (fun hole ind ->
-                    List.fold_left
-                      (fun hole (oldv, newv) ->
-                        subs hole
-                          (IntTermVar
-                             (T (indexer (var_tostr (AIntTermVar oldv)) ind)))
-                          (Term
-                             (ITerm
-                                (ITVar
-                                   (T
-                                      (indexer
-                                         (var_tostr (AIntTermVar newv))
-                                         ind))))))
-                      (List.fold_left
-                         (fun hole (oldv, newv) ->
-                           subs hole
-                             (BitvTermVar
-                                (T (indexer (var_tostr (ABitvTermVar oldv)) ind)))
-                             (Term
-                                (BitvTerm
-                                   (BitvTVar
-                                      (T
-                                         (indexer
-                                            (var_tostr (ABitvTermVar newv))
-                                            ind))))))
-                         hole
-                         (VMap_ABitvT.bindings vmaps.bitv_map))
-                      (VMap_AIT.bindings vmaps.int_map))
-                  expanded_hole off_inds ))
-          t_guards
-      in
-      let conjoined_holes =
-        List.fold_left
-          (fun form hole -> And (form, hole))
-          True implied_subbed_holes
-      in
-      (* In the finite case, we don't reason about infinite vectors so we can expand explicitly.
-         We perform an across-the-board conversion of holes over vector states to holes over the entries.
-         This is a bit of a hack to use all the infinite vs machinery and change it at the very end, but let's not worry about that. *)
-      conjoined_holes
-  | TPrime f -> TPrime (bool_finite_vs_transformer max_ind f)
-  | _ -> form)
+            (fun form hole -> And (form, hole))
+            True implied_subbed_holes
+        in
+        (* In the finite case, we don't reason about infinite vectors so we can expand explicitly.
+           We perform an across-the-board conversion of holes over vector states to holes over the entries.
+           This is a bit of a hack to use all the infinite vs machinery and change it at the very end, but let's not worry about that. *)
+        conjoined_holes
+    | TPrime f -> TPrime (bool_finite_vs_transformer max_ind f)
+    | _ -> form
 
 and exp_finite_vs_transformer max_ind exp =
   match exp with

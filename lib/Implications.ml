@@ -208,18 +208,19 @@ let rec get_bholes form =
 
 module No_Simp : VCSimpStrat = struct
   (* Returns list of form * previously_existed_vars and set of active var names. *)
-  let deconjunctivizer_rhs form varset =
-    ([ (form, VS.empty) ], varset)
+  let deconjunctivizer_rhs form varset = ([ (form, VS.empty) ], varset)
 
   let deconjunctivizer pre post =
     let form = Implies (pre, post) in
-    let frm_nd_existed, _ = deconjunctivizer_rhs form (free_vars form VS.empty) in
+    let frm_nd_existed, _ =
+      deconjunctivizer_rhs form (free_vars form VS.empty)
+    in
     frm_nd_existed
 end
 
 module Quantify_Collect : VCSimpStrat = struct
   (* Recursively pulls out \exists on LHS.
-    Returns the new formula as well as previously existentially quantified variables (or what they are renamed to). *)
+     Returns the new formula as well as previously existentially quantified variables (or what they are renamed to). *)
   let rec deconjunctivizer_lhs form varset =
     match form with
     | Exists (v, body) ->
@@ -268,9 +269,11 @@ module Quantify_Collect : VCSimpStrat = struct
             (fun (rhs_partic, rhs_existed) ->
               match rhs_partic with
               | Implies (a, b) ->
-                  (Implies (And (lhs_new, a), b), VS.union lhs_existed rhs_existed)
+                  ( Implies (And (lhs_new, a), b),
+                    VS.union lhs_existed rhs_existed )
               | _ ->
-                  (Implies (lhs_new, rhs_partic), VS.union lhs_existed rhs_existed))
+                  ( Implies (lhs_new, rhs_partic),
+                    VS.union lhs_existed rhs_existed ))
             rhs_news,
           varset )
     | And (a, b) ->
@@ -282,9 +285,12 @@ module Quantify_Collect : VCSimpStrat = struct
 
   let deconjunctivizer pre post =
     let form = Implies (pre, post) in
-    let frm_nd_existed, _ = deconjunctivizer_rhs form (free_vars form VS.empty) in
+    let frm_nd_existed, _ =
+      deconjunctivizer_rhs form (free_vars form VS.empty)
+    in
     frm_nd_existed
 end
+
 (* WRITING *)
 (* Writing formulas to smt files *)
 let rec to_smt_helper_int_term int_term =
@@ -552,6 +558,217 @@ let to_negated_smt_vampire form name =
 
 module BitvecGrammarStrat : HoleSynthStrat = struct
   (* let bool_hole_to_sygus_grammar (_, sl) =
+     if
+       List.exists
+         (fun x -> match x with BitvTermVar _ -> false | _ -> true)
+         sl
+     then ""
+     else
+       let lock_nonterm_body = ref "true" in
+       (* If e_t is every other entry *)
+       if List.length sl mod 2 = 0 then (
+         let evens = List.filteri (fun i _ -> i mod 2 = 0) sl
+         and odds = List.filteri (fun i _ -> i mod 2 = 1) sl in
+         List.iter
+           (fun bit ->
+             List.iter
+               (fun (od, ev) ->
+                 lock_nonterm_body :=
+                   !lock_nonterm_body
+                   ^ Printf.sprintf
+                       "(=> (bvult #x00000000 (bvand %s %s)) (bvult #x00000000 \
+                        (bvand %s %s)))\n"
+                       (var_tostr od) bit (var_tostr ev) bit)
+               (List.combine odds evens))
+           [
+             "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+           ];
+         List.iter
+           (fun bit ->
+             List.iter
+               (fun (od, ev) ->
+                 lock_nonterm_body :=
+                   !lock_nonterm_body
+                   ^ Printf.sprintf
+                       "(=> (not (bvult #x00000000 (bvand %s %s))) (bvult \
+                        #x00000000 (bvand %s %s)))\n"
+                       (var_tostr od) bit (var_tostr ev) bit)
+               (List.combine odds evens))
+           [
+             "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+           ];
+         List.iter
+           (fun bit ->
+             List.iter
+               (fun (od, ev) ->
+                 lock_nonterm_body :=
+                   !lock_nonterm_body
+                   ^ Printf.sprintf
+                       "(=> (bvult #x00000000 (bvand %s %s)) (not (bvult \
+                        #x00000000 (bvand %s %s))))\n"
+                       (var_tostr od) bit (var_tostr ev) bit)
+               (List.combine odds evens))
+           [
+             "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+           ];
+         List.iter
+           (fun bit ->
+             List.iter
+               (fun (od, ev) ->
+                 lock_nonterm_body :=
+                   !lock_nonterm_body
+                   ^ Printf.sprintf
+                       "(=> (not (bvult #x00000000 (bvand %s %s))) (not (bvult \
+                        #x00000000 (bvand %s %s))))\n"
+                       (var_tostr od) bit (var_tostr ev) bit)
+               (List.combine odds evens))
+           [
+             "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+           ])
+       else ();
+       (* If e_t is every third entry *)
+       if List.length sl mod 3 = 0 then (
+         let zeros = List.filteri (fun i _ -> i mod 3 = 0) sl
+         and ones = List.filteri (fun i _ -> i mod 3 = 1) sl
+         and twos = List.filteri (fun i _ -> i mod 3 = 2) sl in
+         List.iter
+           (fun bit ->
+             List.iter
+               (fun ((zero, one), two) ->
+                 lock_nonterm_body :=
+                   !lock_nonterm_body
+                   ^ Printf.sprintf
+                       "(=> (and (bvult #x00000000 (bvand %s %s)) (bvult \
+                        #x00000000 (bvand %s %s))) (bvult #x00000000 (bvand %s \
+                        %s)))\n"
+                       (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
+                       bit)
+               (List.combine (List.combine zeros ones) twos))
+           [
+             "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+           ];
+         List.iter
+           (fun bit ->
+             List.iter
+               (fun ((zero, one), two) ->
+                 lock_nonterm_body :=
+                   !lock_nonterm_body
+                   ^ Printf.sprintf
+                       "(=> (and (bvult #x00000000 (bvand %s %s)) (bvult \
+                        #x00000000 (bvand %s %s))) (not (bvult #x00000000 \
+                        (bvand %s %s))))\n"
+                       (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
+                       bit)
+               (List.combine (List.combine zeros ones) twos))
+           [
+             "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+           ];
+         List.iter
+           (fun bit ->
+             List.iter
+               (fun ((zero, one), two) ->
+                 lock_nonterm_body :=
+                   !lock_nonterm_body
+                   ^ Printf.sprintf
+                       "(=> (and (bvult #x00000000 (bvand %s %s)) (not (bvult \
+                        #x00000000 (bvand %s %s)))) (bvult #x00000000 (bvand %s \
+                        %s)))\n"
+                       (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
+                       bit)
+               (List.combine (List.combine zeros ones) twos))
+           [
+             "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+           ];
+         List.iter
+           (fun bit ->
+             List.iter
+               (fun ((zero, one), two) ->
+                 lock_nonterm_body :=
+                   !lock_nonterm_body
+                   ^ Printf.sprintf
+                       "(=> (and (bvult #x00000000 (bvand %s %s)) (not (bvult \
+                        #x00000000 (bvand %s %s)))) (not (bvult #x00000000 \
+                        (bvand %s %s))))\n"
+                       (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
+                       bit)
+               (List.combine (List.combine zeros ones) twos))
+           [
+             "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+           ];
+         List.iter
+           (fun bit ->
+             List.iter
+               (fun ((zero, one), two) ->
+                 lock_nonterm_body :=
+                   !lock_nonterm_body
+                   ^ Printf.sprintf
+                       "(=> (and (not (bvult #x00000000 (bvand %s %s))) (bvult \
+                        #x00000000 (bvand %s %s))) (bvult #x00000000 (bvand %s \
+                        %s)))\n"
+                       (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
+                       bit)
+               (List.combine (List.combine zeros ones) twos))
+           [
+             "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+           ];
+         List.iter
+           (fun bit ->
+             List.iter
+               (fun ((zero, one), two) ->
+                 lock_nonterm_body :=
+                   !lock_nonterm_body
+                   ^ Printf.sprintf
+                       "(=> (and (not (bvult #x00000000 (bvand %s %s))) (bvult \
+                        #x00000000 (bvand %s %s))) (not (bvult #x00000000 \
+                        (bvand %s %s))))\n"
+                       (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
+                       bit)
+               (List.combine (List.combine zeros ones) twos))
+           [
+             "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+           ];
+         List.iter
+           (fun bit ->
+             List.iter
+               (fun ((zero, one), two) ->
+                 lock_nonterm_body :=
+                   !lock_nonterm_body
+                   ^ Printf.sprintf
+                       "(=> (and (not (bvult #x00000000 (bvand %s %s))) (not \
+                        (bvult #x00000000 (bvand %s %s)))) (bvult #x00000000 \
+                        (bvand %s %s)))\n"
+                       (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
+                       bit)
+               (List.combine (List.combine zeros ones) twos))
+           [
+             "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+           ];
+         List.iter
+           (fun bit ->
+             List.iter
+               (fun ((zero, one), two) ->
+                 lock_nonterm_body :=
+                   !lock_nonterm_body
+                   ^ Printf.sprintf
+                       "(=> (and (not (bvult #x00000000 (bvand %s %s))) (not \
+                        (bvult #x00000000 (bvand %s %s)))) (not (bvult \
+                        #x00000000 (bvand %s %s))))\n"
+                       (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
+                       bit)
+               (List.combine (List.combine zeros ones) twos))
+           [
+             "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
+           ])
+       else ();
+       ";; Declare the non-terminals that would be used in the grammar\n\
+       \    ((DisjOpt Bool) (NegOpt Bool) (Lock Bool)\n\
+       \     )\n\n\
+       \    ;; Define the grammar \n\
+       \     ((DisjOpt Bool (NegOpt (or NegOpt DisjOpt)))\n\
+       \     (NegOpt Bool (Lock (not Lock)))\n\
+       \     (Lock Bool (" ^ !lock_nonterm_body ^ ")))" *)
+
+  let bool_hole_to_sygus_grammar (_, sl) =
     if
       List.exists
         (fun x -> match x with BitvTermVar _ -> false | _ -> true)
@@ -565,57 +782,65 @@ module BitvecGrammarStrat : HoleSynthStrat = struct
         and odds = List.filteri (fun i _ -> i mod 2 = 1) sl in
         List.iter
           (fun bit ->
-            List.iter
-              (fun (od, ev) ->
-                lock_nonterm_body :=
-                  !lock_nonterm_body
-                  ^ Printf.sprintf
-                      "(=> (bvult #x00000000 (bvand %s %s)) (bvult #x00000000 \
-                       (bvand %s %s)))\n"
-                      (var_tostr od) bit (var_tostr ev) bit)
-              (List.combine odds evens))
+            lock_nonterm_body :=
+              !lock_nonterm_body
+              ^ Printf.sprintf "%s\n"
+                  (List.fold_left
+                     (fun frm_str (od, ev) ->
+                       Printf.sprintf "(and %s %s)" frm_str
+                         (Printf.sprintf
+                            "(=> (bvult #x00000000 (bvand %s %s)) (bvult \
+                             #x00000000 (bvand %s %s)))"
+                            (var_tostr od) bit (var_tostr ev) bit))
+                     "true" (List.combine odds evens)))
           [
             "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
           ];
         List.iter
           (fun bit ->
-            List.iter
-              (fun (od, ev) ->
-                lock_nonterm_body :=
-                  !lock_nonterm_body
-                  ^ Printf.sprintf
-                      "(=> (not (bvult #x00000000 (bvand %s %s))) (bvult \
-                       #x00000000 (bvand %s %s)))\n"
-                      (var_tostr od) bit (var_tostr ev) bit)
-              (List.combine odds evens))
+            lock_nonterm_body :=
+              !lock_nonterm_body
+              ^ Printf.sprintf "%s\n"
+                  (List.fold_left
+                     (fun frm_str (od, ev) ->
+                       Printf.sprintf "(and %s %s)" frm_str
+                         (Printf.sprintf
+                            "(=> (not (bvult #x00000000 (bvand %s %s))) (bvult \
+                             #x00000000 (bvand %s %s)))"
+                            (var_tostr od) bit (var_tostr ev) bit))
+                     "true" (List.combine odds evens)))
           [
             "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
           ];
         List.iter
           (fun bit ->
-            List.iter
-              (fun (od, ev) ->
-                lock_nonterm_body :=
-                  !lock_nonterm_body
-                  ^ Printf.sprintf
-                      "(=> (bvult #x00000000 (bvand %s %s)) (not (bvult \
-                       #x00000000 (bvand %s %s))))\n"
-                      (var_tostr od) bit (var_tostr ev) bit)
-              (List.combine odds evens))
+            lock_nonterm_body :=
+              !lock_nonterm_body
+              ^ Printf.sprintf "%s\n"
+                  (List.fold_left
+                     (fun frm_str (od, ev) ->
+                       Printf.sprintf "(and %s %s)" frm_str
+                         (Printf.sprintf
+                            "(=> (bvult #x00000000 (bvand %s %s)) (not (bvult \
+                             #x00000000 (bvand %s %s))))"
+                            (var_tostr od) bit (var_tostr ev) bit))
+                     "true" (List.combine odds evens)))
           [
             "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
           ];
         List.iter
           (fun bit ->
-            List.iter
-              (fun (od, ev) ->
-                lock_nonterm_body :=
-                  !lock_nonterm_body
-                  ^ Printf.sprintf
-                      "(=> (not (bvult #x00000000 (bvand %s %s))) (not (bvult \
-                       #x00000000 (bvand %s %s))))\n"
-                      (var_tostr od) bit (var_tostr ev) bit)
-              (List.combine odds evens))
+            lock_nonterm_body :=
+              !lock_nonterm_body
+              ^ Printf.sprintf "%s\n"
+                  (List.fold_left
+                     (fun frm_str (od, ev) ->
+                       Printf.sprintf "(and %s %s)" frm_str
+                         (Printf.sprintf
+                            "(=> (not (bvult #x00000000 (bvand %s %s))) (not \
+                             (bvult #x00000000 (bvand %s %s))))"
+                            (var_tostr od) bit (var_tostr ev) bit))
+                     "true" (List.combine odds evens)))
           [
             "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
           ])
@@ -627,129 +852,153 @@ module BitvecGrammarStrat : HoleSynthStrat = struct
         and twos = List.filteri (fun i _ -> i mod 3 = 2) sl in
         List.iter
           (fun bit ->
-            List.iter
-              (fun ((zero, one), two) ->
-                lock_nonterm_body :=
-                  !lock_nonterm_body
-                  ^ Printf.sprintf
-                      "(=> (and (bvult #x00000000 (bvand %s %s)) (bvult \
-                       #x00000000 (bvand %s %s))) (bvult #x00000000 (bvand %s \
-                       %s)))\n"
-                      (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
-                      bit)
-              (List.combine (List.combine zeros ones) twos))
+            lock_nonterm_body :=
+              !lock_nonterm_body
+              ^ Printf.sprintf "%s\n"
+                  (List.fold_left
+                     (fun frm_str ((zero, one), two) ->
+                       Printf.sprintf "(and %s %s)" frm_str
+                         (Printf.sprintf
+                            "(=> (and (bvult #x00000000 (bvand %s %s)) (bvult \
+                             #x00000000 (bvand %s %s))) (bvult #x00000000 \
+                             (bvand %s %s)))\n"
+                            (var_tostr one) bit (var_tostr two) bit
+                            (var_tostr zero) bit))
+                     "true"
+                     (List.combine (List.combine zeros ones) twos)))
           [
             "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
           ];
         List.iter
           (fun bit ->
-            List.iter
-              (fun ((zero, one), two) ->
-                lock_nonterm_body :=
-                  !lock_nonterm_body
-                  ^ Printf.sprintf
-                      "(=> (and (bvult #x00000000 (bvand %s %s)) (bvult \
-                       #x00000000 (bvand %s %s))) (not (bvult #x00000000 \
-                       (bvand %s %s))))\n"
-                      (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
-                      bit)
-              (List.combine (List.combine zeros ones) twos))
+            lock_nonterm_body :=
+              !lock_nonterm_body
+              ^ Printf.sprintf "%s\n"
+                  (List.fold_left
+                     (fun frm_str ((zero, one), two) ->
+                       Printf.sprintf "(and %s %s)" frm_str
+                         (Printf.sprintf
+                            "(=> (and (bvult #x00000000 (bvand %s %s)) (bvult \
+                             #x00000000 (bvand %s %s))) (not (bvult #x00000000 \
+                             (bvand %s %s))))\n"
+                            (var_tostr one) bit (var_tostr two) bit
+                            (var_tostr zero) bit))
+                     "true"
+                     (List.combine (List.combine zeros ones) twos)))
           [
             "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
           ];
         List.iter
           (fun bit ->
-            List.iter
-              (fun ((zero, one), two) ->
-                lock_nonterm_body :=
-                  !lock_nonterm_body
-                  ^ Printf.sprintf
-                      "(=> (and (bvult #x00000000 (bvand %s %s)) (not (bvult \
-                       #x00000000 (bvand %s %s)))) (bvult #x00000000 (bvand %s \
-                       %s)))\n"
-                      (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
-                      bit)
-              (List.combine (List.combine zeros ones) twos))
+            lock_nonterm_body :=
+              !lock_nonterm_body
+              ^ Printf.sprintf "%s\n"
+                  (List.fold_left
+                     (fun frm_str ((zero, one), two) ->
+                       Printf.sprintf "(and %s %s)" frm_str
+                         (Printf.sprintf
+                            "(=> (and (bvult #x00000000 (bvand %s %s)) (not \
+                             (bvult #x00000000 (bvand %s %s)))) (bvult \
+                             #x00000000 (bvand %s %s)))\n"
+                            (var_tostr one) bit (var_tostr two) bit
+                            (var_tostr zero) bit))
+                     "true"
+                     (List.combine (List.combine zeros ones) twos)))
           [
             "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
           ];
         List.iter
           (fun bit ->
-            List.iter
-              (fun ((zero, one), two) ->
-                lock_nonterm_body :=
-                  !lock_nonterm_body
-                  ^ Printf.sprintf
-                      "(=> (and (bvult #x00000000 (bvand %s %s)) (not (bvult \
-                       #x00000000 (bvand %s %s)))) (not (bvult #x00000000 \
-                       (bvand %s %s))))\n"
-                      (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
-                      bit)
-              (List.combine (List.combine zeros ones) twos))
+            lock_nonterm_body :=
+              !lock_nonterm_body
+              ^ Printf.sprintf "%s\n"
+                  (List.fold_left
+                     (fun frm_str ((zero, one), two) ->
+                       Printf.sprintf "(and %s %s)" frm_str
+                         (Printf.sprintf
+                            "(=> (and (bvult #x00000000 (bvand %s %s)) (not \
+                             (bvult #x00000000 (bvand %s %s)))) (not (bvult \
+                             #x00000000 (bvand %s %s))))\n"
+                            (var_tostr one) bit (var_tostr two) bit
+                            (var_tostr zero) bit))
+                     "true"
+                     (List.combine (List.combine zeros ones) twos)))
           [
             "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
           ];
         List.iter
           (fun bit ->
-            List.iter
-              (fun ((zero, one), two) ->
-                lock_nonterm_body :=
-                  !lock_nonterm_body
-                  ^ Printf.sprintf
-                      "(=> (and (not (bvult #x00000000 (bvand %s %s))) (bvult \
-                       #x00000000 (bvand %s %s))) (bvult #x00000000 (bvand %s \
-                       %s)))\n"
-                      (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
-                      bit)
-              (List.combine (List.combine zeros ones) twos))
+            lock_nonterm_body :=
+              !lock_nonterm_body
+              ^ Printf.sprintf "%s\n"
+                  (List.fold_left
+                     (fun frm_str ((zero, one), two) ->
+                       Printf.sprintf "(and %s %s)" frm_str
+                         (Printf.sprintf
+                            "(=> (and (not (bvult #x00000000 (bvand %s %s))) \
+                             (bvult #x00000000 (bvand %s %s))) (bvult \
+                             #x00000000 (bvand %s %s)))\n"
+                            (var_tostr one) bit (var_tostr two) bit
+                            (var_tostr zero) bit))
+                     "true"
+                     (List.combine (List.combine zeros ones) twos)))
           [
             "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
           ];
         List.iter
           (fun bit ->
-            List.iter
-              (fun ((zero, one), two) ->
-                lock_nonterm_body :=
-                  !lock_nonterm_body
-                  ^ Printf.sprintf
-                      "(=> (and (not (bvult #x00000000 (bvand %s %s))) (bvult \
-                       #x00000000 (bvand %s %s))) (not (bvult #x00000000 \
-                       (bvand %s %s))))\n"
-                      (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
-                      bit)
-              (List.combine (List.combine zeros ones) twos))
+            lock_nonterm_body :=
+              !lock_nonterm_body
+              ^ Printf.sprintf "%s\n"
+                  (List.fold_left
+                     (fun frm_str ((zero, one), two) ->
+                       Printf.sprintf "(and %s %s)" frm_str
+                         (Printf.sprintf
+                            "(=> (and (not (bvult #x00000000 (bvand %s %s))) \
+                             (bvult #x00000000 (bvand %s %s))) (not (bvult \
+                             #x00000000 (bvand %s %s))))\n"
+                            (var_tostr one) bit (var_tostr two) bit
+                            (var_tostr zero) bit))
+                     "true"
+                     (List.combine (List.combine zeros ones) twos)))
           [
             "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
           ];
         List.iter
           (fun bit ->
-            List.iter
-              (fun ((zero, one), two) ->
-                lock_nonterm_body :=
-                  !lock_nonterm_body
-                  ^ Printf.sprintf
-                      "(=> (and (not (bvult #x00000000 (bvand %s %s))) (not \
-                       (bvult #x00000000 (bvand %s %s)))) (bvult #x00000000 \
-                       (bvand %s %s)))\n"
-                      (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
-                      bit)
-              (List.combine (List.combine zeros ones) twos))
+            lock_nonterm_body :=
+              !lock_nonterm_body
+              ^ Printf.sprintf "%s\n"
+                  (List.fold_left
+                     (fun frm_str ((zero, one), two) ->
+                       Printf.sprintf "(and %s %s)" frm_str
+                         (Printf.sprintf
+                            "(=> (and (not (bvult #x00000000 (bvand %s %s))) \
+                             (not (bvult #x00000000 (bvand %s %s)))) (bvult \
+                             #x00000000 (bvand %s %s)))\n"
+                            (var_tostr one) bit (var_tostr two) bit
+                            (var_tostr zero) bit))
+                     "true"
+                     (List.combine (List.combine zeros ones) twos)))
           [
             "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
           ];
         List.iter
           (fun bit ->
-            List.iter
-              (fun ((zero, one), two) ->
-                lock_nonterm_body :=
-                  !lock_nonterm_body
-                  ^ Printf.sprintf
-                      "(=> (and (not (bvult #x00000000 (bvand %s %s))) (not \
-                       (bvult #x00000000 (bvand %s %s)))) (not (bvult \
-                       #x00000000 (bvand %s %s))))\n"
-                      (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
-                      bit)
-              (List.combine (List.combine zeros ones) twos))
+            lock_nonterm_body :=
+              !lock_nonterm_body
+              ^ Printf.sprintf "%s\n"
+                  (List.fold_left
+                     (fun frm_str ((zero, one), two) ->
+                       Printf.sprintf "(and %s %s)" frm_str
+                         (Printf.sprintf
+                            "(=> (and (not (bvult #x00000000 (bvand %s %s))) \
+                             (not (bvult #x00000000 (bvand %s %s)))) (not \
+                             (bvult #x00000000 (bvand %s %s))))\n"
+                            (var_tostr one) bit (var_tostr two) bit
+                            (var_tostr zero) bit))
+                     "true"
+                     (List.combine (List.combine zeros ones) twos)))
           [
             "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
           ])
@@ -760,249 +1009,8 @@ module BitvecGrammarStrat : HoleSynthStrat = struct
       \    ;; Define the grammar \n\
       \     ((DisjOpt Bool (NegOpt (or NegOpt DisjOpt)))\n\
       \     (NegOpt Bool (Lock (not Lock)))\n\
-      \     (Lock Bool (" ^ !lock_nonterm_body ^ ")))" *)
-
-      let bool_hole_to_sygus_grammar (_, sl) =
-        if
-          List.exists
-            (fun x -> match x with BitvTermVar _ -> false | _ -> true)
-            sl
-        then ""
-        else
-          let lock_nonterm_body = ref "true" in
-          (* If e_t is every other entry *)
-          if List.length sl mod 2 = 0 then (
-            let evens = List.filteri (fun i _ -> i mod 2 = 0) sl
-            and odds = List.filteri (fun i _ -> i mod 2 = 1) sl in
-            (List.iter
-                (fun bit ->
-                  lock_nonterm_body :=
-                      !lock_nonterm_body
-                      ^ Printf.sprintf "%s\n"
-                  (List.fold_left
-                    (fun frm_str (od, ev) ->
-                      Printf.sprintf "(and %s %s)" frm_str
-                        (Printf.sprintf "(=> (bvult #x00000000 (bvand %s %s)) (bvult #x00000000 \
-                          (bvand %s %s)))"
-                          (var_tostr od) bit (var_tostr ev) bit))
-                    "true" (List.combine odds evens)))
-                  [
-                  "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
-                  ]);
-              (List.iter
-                (fun bit ->
-                  lock_nonterm_body :=
-                      !lock_nonterm_body
-                      ^ Printf.sprintf "%s\n"
-                  (List.fold_left
-                    (fun frm_str (od, ev) ->
-                      Printf.sprintf "(and %s %s)" frm_str
-                        (Printf.sprintf "(=> (not (bvult #x00000000 (bvand %s %s))) (bvult #x00000000 \
-                          (bvand %s %s)))"
-                          (var_tostr od) bit (var_tostr ev) bit))
-                    "true" (List.combine odds evens)))
-                  [
-                  "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
-                  ]);
-              (List.iter
-                (fun bit ->
-                  lock_nonterm_body :=
-                      !lock_nonterm_body
-                      ^ Printf.sprintf "%s\n"
-                  (List.fold_left
-                    (fun frm_str (od, ev) ->
-                      Printf.sprintf "(and %s %s)" frm_str
-                        (Printf.sprintf "(=> (bvult #x00000000 (bvand %s %s)) (not (bvult #x00000000 \
-                          (bvand %s %s))))"
-                          (var_tostr od) bit (var_tostr ev) bit))
-                    "true" (List.combine odds evens)))
-                  [
-                  "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
-                  ]);
-              (List.iter
-                (fun bit ->
-                  lock_nonterm_body :=
-                      !lock_nonterm_body
-                      ^ Printf.sprintf "%s\n"
-                  (List.fold_left
-                    (fun frm_str (od, ev) ->
-                      Printf.sprintf "(and %s %s)" frm_str
-                        (Printf.sprintf "(=> (not (bvult #x00000000 (bvand %s %s))) (not (bvult #x00000000 \
-                          (bvand %s %s))))"
-                          (var_tostr od) bit (var_tostr ev) bit))
-                    "true" (List.combine odds evens)))
-                  [
-                  "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
-                  ])
-            )
-          else ();
-          (* If e_t is every third entry *)
-          if List.length sl mod 3 = 0 then (
-            let zeros = List.filteri (fun i _ -> i mod 3 = 0) sl
-            and ones = List.filteri (fun i _ -> i mod 3 = 1) sl
-            and twos = List.filteri (fun i _ -> i mod 3 = 2) sl in
-            List.iter
-              (fun bit ->
-                lock_nonterm_body :=
-                      !lock_nonterm_body
-                      ^ (Printf.sprintf "%s\n"
-                (List.fold_left
-                  (fun frm_str ((zero, one), two) ->
-                    Printf.sprintf "(and %s %s)" frm_str  
-                     (Printf.sprintf
-                          "(=> (and (bvult #x00000000 (bvand %s %s)) (bvult \
-                           #x00000000 (bvand %s %s))) (bvult #x00000000 (bvand %s \
-                           %s)))\n"
-                          (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
-                          bit))
-                          "true"
-                  (List.combine (List.combine zeros ones) twos))))
-              [
-                "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
-              ];
-              List.iter
-              (fun bit ->
-                lock_nonterm_body :=
-                      !lock_nonterm_body
-                      ^ (Printf.sprintf "%s\n"
-                (List.fold_left
-                  (fun frm_str ((zero, one), two) ->
-                    Printf.sprintf "(and %s %s)" frm_str  
-                     (Printf.sprintf
-                          "(=> (and (bvult #x00000000 (bvand %s %s)) (bvult \
-                           #x00000000 (bvand %s %s))) (not (bvult #x00000000 (bvand %s \
-                           %s))))\n"
-                          (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
-                          bit))
-                          "true"
-                  (List.combine (List.combine zeros ones) twos))))
-              [
-                "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
-              ];
-              List.iter
-              (fun bit ->
-                lock_nonterm_body :=
-                      !lock_nonterm_body
-                      ^ (Printf.sprintf "%s\n"
-                (List.fold_left
-                  (fun frm_str ((zero, one), two) ->
-                    Printf.sprintf "(and %s %s)" frm_str  
-                     (Printf.sprintf
-                          "(=> (and (bvult #x00000000 (bvand %s %s)) (not (bvult \
-                           #x00000000 (bvand %s %s)))) (bvult #x00000000 (bvand %s \
-                           %s)))\n"
-                          (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
-                          bit))
-                          "true"
-                  (List.combine (List.combine zeros ones) twos))))
-              [
-                "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
-              ];
-              List.iter
-              (fun bit ->
-                lock_nonterm_body :=
-                      !lock_nonterm_body
-                      ^ (Printf.sprintf "%s\n"
-                (List.fold_left
-                  (fun frm_str ((zero, one), two) ->
-                    Printf.sprintf "(and %s %s)" frm_str  
-                     (Printf.sprintf
-                          "(=> (and (bvult #x00000000 (bvand %s %s)) (not (bvult \
-                           #x00000000 (bvand %s %s)))) (not (bvult #x00000000 (bvand %s \
-                           %s))))\n"
-                          (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
-                          bit))
-                          "true"
-                  (List.combine (List.combine zeros ones) twos))))
-              [
-                "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
-              ];            
-              List.iter
-              (fun bit ->
-                lock_nonterm_body :=
-                      !lock_nonterm_body
-                      ^ (Printf.sprintf "%s\n"
-                (List.fold_left
-                  (fun frm_str ((zero, one), two) ->
-                    Printf.sprintf "(and %s %s)" frm_str  
-                     (Printf.sprintf
-                          "(=> (and (not (bvult #x00000000 (bvand %s %s))) (bvult \
-                           #x00000000 (bvand %s %s))) (bvult #x00000000 (bvand %s \
-                           %s)))\n"
-                          (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
-                          bit))
-                          "true"
-                  (List.combine (List.combine zeros ones) twos))))
-              [
-                "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
-              ];
-              List.iter
-              (fun bit ->
-                lock_nonterm_body :=
-                      !lock_nonterm_body
-                      ^ (Printf.sprintf "%s\n"
-                (List.fold_left
-                  (fun frm_str ((zero, one), two) ->
-                    Printf.sprintf "(and %s %s)" frm_str  
-                     (Printf.sprintf
-                          "(=> (and (not (bvult #x00000000 (bvand %s %s))) (bvult \
-                           #x00000000 (bvand %s %s))) (not (bvult #x00000000 (bvand %s \
-                           %s))))\n"
-                          (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
-                          bit))
-                          "true"
-                  (List.combine (List.combine zeros ones) twos))))
-              [
-                "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
-              ];
-              List.iter
-              (fun bit ->
-                lock_nonterm_body :=
-                      !lock_nonterm_body
-                      ^ (Printf.sprintf "%s\n"
-                (List.fold_left
-                  (fun frm_str ((zero, one), two) ->
-                    Printf.sprintf "(and %s %s)" frm_str  
-                     (Printf.sprintf
-                          "(=> (and (not (bvult #x00000000 (bvand %s %s))) (not (bvult \
-                           #x00000000 (bvand %s %s)))) (bvult #x00000000 (bvand %s \
-                           %s)))\n"
-                          (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
-                          bit))
-                          "true"
-                  (List.combine (List.combine zeros ones) twos))))
-              [
-                "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
-              ];
-              List.iter
-              (fun bit ->
-                lock_nonterm_body :=
-                      !lock_nonterm_body
-                      ^ (Printf.sprintf "%s\n"
-                (List.fold_left
-                  (fun frm_str ((zero, one), two) ->
-                    Printf.sprintf "(and %s %s)" frm_str  
-                     (Printf.sprintf
-                          "(=> (and (not (bvult #x00000000 (bvand %s %s))) (not (bvult \
-                           #x00000000 (bvand %s %s)))) (not (bvult #x00000000 (bvand %s \
-                           %s))))\n"
-                          (var_tostr one) bit (var_tostr two) bit (var_tostr zero)
-                          bit))
-                          "true"
-                  (List.combine (List.combine zeros ones) twos))))
-              [
-                "#x00000001"; "#x00000002"; "#x00000004"; "#x00000008"; "#x00000010";
-              ])
-          else ();
-          ";; Declare the non-terminals that would be used in the grammar\n\
-          \    ((DisjOpt Bool) (NegOpt Bool) (Lock Bool)\n\
-          \     )\n\n\
-          \    ;; Define the grammar \n\
-          \     ((DisjOpt Bool (NegOpt (or NegOpt DisjOpt)))\n\
-          \     (NegOpt Bool (Lock (not Lock)))\n\
-          \     (Lock Bool (" ^ !lock_nonterm_body ^ ")))"
-    
-  end
+      \     (Lock Bool (" ^ !lock_nonterm_body ^ ")))"
+end
 
 module UnconstrainedGrammarStrat : HoleSynthStrat = struct
   let bool_hole_to_sygus_grammar (_, _) = ""
@@ -1083,7 +1091,8 @@ let to_sygus constraints bool_hole_list term_hole_list
               Printf.sprintf "(constraint %s)" (to_smt_helper aconstraint))
             constraints))
   in
-  (Printf.sprintf "(set-logic %s)\n\n" logic_string) ^ str1 ^ str2 ^ str3 ^ str4 ^ "(check-synth)"
+  Printf.sprintf "(set-logic %s)\n\n" logic_string
+  ^ str1 ^ str2 ^ str3 ^ str4 ^ "(check-synth)"
 
 (* Utilities for discharging implications --
    The idea will be to spawn processes to invoke Z3 or whichever solver.
@@ -1482,7 +1491,8 @@ let implicator_hole_synth_cvc5 bool_hole_to_sygus_grammar deconjunctivizer_rhs =
           (* Set up the file. *)
           let oc = open_out (Printf.sprintf "%s.sy" filename_pref) in
           Printf.fprintf oc "%s"
-            (to_sygus !constraint_logger hole_list [] bool_hole_to_sygus_grammar "ALL");
+            (to_sygus !constraint_logger hole_list [] bool_hole_to_sygus_grammar
+               "ALL");
           close_out oc;
           (* Dispatch synthesis to solver *)
           (* Fork and exec a query *)
@@ -1496,10 +1506,7 @@ let implicator_hole_synth_cvc5 bool_hole_to_sygus_grammar deconjunctivizer_rhs =
             in
             Unix.dup2 fd Unix.stdout;
             Unix.execvp "cvc5"
-              (Array.of_list
-                 [
-                   "cvc5"; Printf.sprintf "%s.sy" filename_pref;
-                 ])
+              (Array.of_list [ "cvc5"; Printf.sprintf "%s.sy" filename_pref ])
             (* Wait. If can't synth, then record no solutions.
                 Else, record existenct of a solution, store solution, and return it as string (for now).
                 TODO: Parse string so a mapping is returned instead; the contents of the mapping can be subbed intop the proof. *))
@@ -1607,7 +1614,8 @@ let no_hole_vector_state_implicator_vampire () =
   no_hole_verify
 
 (* IMPLICATION MODULES *)
-module NoHoleSimpleImplicatorZ3 (VCSimp : VCSimpStrat) : ImplicationHandler = struct
+module NoHoleSimpleImplicatorZ3 (VCSimp : VCSimpStrat) : ImplicationHandler =
+struct
   let base_verif = no_hole_simple_implicator_z3 ()
 
   let implies pre post =
@@ -1620,16 +1628,19 @@ module NoHoleSimpleImplicatorZ3 (VCSimp : VCSimpStrat) : ImplicationHandler = st
   let hole_values = lazy []
 end
 
-module HoleSynthSimpleImplicatorCVC5 (SygusHoleGrammarStrat : HoleSynthStrat) (VCSimp : VCSimpStrat) :
-  ImplicationHandler = struct
+module HoleSynthSimpleImplicatorCVC5
+    (SygusHoleGrammarStrat : HoleSynthStrat)
+    (VCSimp : VCSimpStrat) : ImplicationHandler = struct
   let base_verif, hole_values =
-    implicator_hole_synth_cvc5 SygusHoleGrammarStrat.bool_hole_to_sygus_grammar VCSimp.deconjunctivizer_rhs
+    implicator_hole_synth_cvc5 SygusHoleGrammarStrat.bool_hole_to_sygus_grammar
+      VCSimp.deconjunctivizer_rhs
 
   let implies pre post = base_verif (Implies (pre, post))
   (* Deconjuncting for cvc5 takes place inside base_verif *)
 end
 
-module NoHoleVectorStateImplicatorVampire (VCSimp : VCSimpStrat) : ImplicationHandler = struct
+module NoHoleVectorStateImplicatorVampire (VCSimp : VCSimpStrat) :
+  ImplicationHandler = struct
   let base_verif = no_hole_vector_state_implicator_vampire ()
 
   let implies pre post =
@@ -1823,7 +1834,7 @@ end
      | Term t -> Term (term_finite_vs_transformer t)
      | Boolean b -> Boolean (bool_finite_vs_transformer max_ind b) *)
 
-let finite_holeless_implicator max_ind deconjunctivizer=
+let finite_holeless_implicator max_ind deconjunctivizer =
   (module struct
     let base_verif = no_hole_simple_implicator_z3 ()
 
@@ -1839,7 +1850,8 @@ let finite_holeless_implicator max_ind deconjunctivizer=
     let hole_values = lazy []
   end : ImplicationHandler)
 
-let finite_holes_implicator max_ind bool_hole_to_sygus_grammar vc_simp_deconj_rhs =
+let finite_holes_implicator max_ind bool_hole_to_sygus_grammar
+    vc_simp_deconj_rhs =
   (module struct
     let base_verif, hole_values =
       implicator_hole_synth_cvc5 bool_hole_to_sygus_grammar vc_simp_deconj_rhs

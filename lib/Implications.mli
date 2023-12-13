@@ -29,10 +29,19 @@ module Quantify_Collect : VCSimpStrat
 
 (* IMPLICATION MODULES *)
 module NoHoleSimpleImplicatorZ3 (_ : VCSimpStrat) : ImplicationHandler
-module HoleSynthSimpleImplicatorCVC5 (_ : HoleSynthStrat) (_ : VCSimpStrat) : ImplicationHandler
+
+module HoleSynthSimpleImplicatorCVC5 (_ : HoleSynthStrat) (_ : VCSimpStrat) :
+  ImplicationHandler
+
 module NoHoleVectorStateImplicatorVampire (_ : VCSimpStrat) : ImplicationHandler
 
 val finite_holes_implicator :
-  int -> (string * variable list -> string) -> (formula -> VS.t -> (formula * VS.t) list * VS.t) -> (module ImplicationHandler)
+  int ->
+  (string * variable list -> string) ->
+  (formula -> VS.t -> (formula * VS.t) list * VS.t) ->
+  (module ImplicationHandler)
 
-val finite_holeless_implicator : int -> (formula -> formula -> (formula * VS.t) list) -> (module ImplicationHandler)
+val finite_holeless_implicator :
+  int ->
+  (formula -> formula -> (formula * VS.t) list) ->
+  (module ImplicationHandler)

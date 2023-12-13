@@ -219,7 +219,7 @@ let nonterm_handler_template expansion_to_prog nterm_to_prog
                   List.for_all
                     (fun (a, _) -> var_tostr a <> var_tostr var)
                     var_pairs_list)
-                (VS.elements (reassigned_vars_clean (nterm_to_prog nterm)))))
+                (VS.elements (reassigned_vars (nterm_to_prog nterm)))))
       in
       let adapted_pre_1, xyz_list =
         List.fold_left
@@ -1866,32 +1866,36 @@ let prove (trip : triple) (smode : synthMode) (fmode : formMode)
      Each module is set up as a 0-ary functor because the modules returned preserve a notion of state.
      Statefulness is necessary to gather implications, discharge them in parallel, etc.
      TODO: See if it makes more sense to do this with a continuation-passing-like scheme to fake statefulness. *)
-  let module VCSimp : Implications.VCSimpStrat = 
-    (val match vc_simp with 
-      | NO_SIMP -> (module Implications.No_Simp : Implications.VCSimpStrat)
-      | QUANTIFY_COLLECT -> (module Implications.Quantify_Collect : Implications.VCSimpStrat)
-      )
-    in
+  let module VCSimp : Implications.VCSimpStrat =
+    (val match vc_simp with
+         | NO_SIMP -> (module Implications.No_Simp : Implications.VCSimpStrat)
+         | QUANTIFY_COLLECT ->
+             (module Implications.Quantify_Collect : Implications.VCSimpStrat))
+  in
   let module Imp =
     (val match (smode, fmode, hole_grm_mode) with
          | HOLE_SYNTH, SIMPLE, NONE ->
              (module Implications.HoleSynthSimpleImplicatorCVC5
-                       (Implications.UnconstrainedGrammarStrat)(VCSimp))
+                       (Implications.UnconstrainedGrammarStrat)
+                       (VCSimp))
          | INVS_SPECIFIED, SIMPLE, _ ->
              (module Implications.NoHoleSimpleImplicatorZ3 (VCSimp))
          | INVS_SPECIFIED, VECTOR_STATE, _ ->
              (module Implications.NoHoleVectorStateImplicatorVampire (VCSimp))
          | INVS_SPECIFIED, FINITE_VECTOR_STATE, _ ->
              Implications.finite_holeless_implicator
-               (max_index (Boolean (And (trip.pre, trip.post)))) (VCSimp.deconjunctivizer)
+               (max_index (Boolean (And (trip.pre, trip.post))))
+               VCSimp.deconjunctivizer
          | HOLE_SYNTH, FINITE_VECTOR_STATE, NONE ->
              Implications.finite_holes_implicator
                (max_index (Boolean (And (trip.pre, trip.post))))
-               (Implications.UnconstrainedGrammarStrat.bool_hole_to_sygus_grammar) (VCSimp.deconjunctivizer_rhs)
+               Implications.UnconstrainedGrammarStrat.bool_hole_to_sygus_grammar
+               VCSimp.deconjunctivizer_rhs
          | HOLE_SYNTH, FINITE_VECTOR_STATE, BITVEC ->
              Implications.finite_holes_implicator
                (max_index (Boolean (And (trip.pre, trip.post))))
-               (Implications.BitvecGrammarStrat.bool_hole_to_sygus_grammar) (VCSimp.deconjunctivizer_rhs)
+               Implications.BitvecGrammarStrat.bool_hole_to_sygus_grammar
+               VCSimp.deconjunctivizer_rhs
          | _ -> raise Unsupported_Mode
         : Implications.ImplicationHandler)
   in

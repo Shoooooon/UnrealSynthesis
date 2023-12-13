@@ -96,3 +96,13 @@ let new_var_of_same_type var1 newvar_name =
    | IntTermVar (T t) -> name = t
    | AIntTermVar ET -> name = "e_t"
    | AIntTermVar (T t) -> name = t *)
+
+let to_array_var var =
+  match var with
+  | BoolVar BT -> ABoolVar BT
+  | BoolVar (B bv) -> ABoolVar (B bv)
+  | IntTermVar ET -> AIntTermVar ET
+  | IntTermVar (T tv) -> AIntTermVar (T tv)
+  | BitvTermVar ET -> ABitvTermVar ET
+  | BitvTermVar (T btv) -> ABitvTermVar (T btv)
+  | _ -> var

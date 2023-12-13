@@ -19,6 +19,8 @@
 %token STMT_KWD
 %token NT_KWD
 %token NONE_KWD
+%token ARRAY_AUTO_KWD
+%token AUTO_KWD
 %token SOME_KWD
 %token HOLE_KWD
 %token ET
@@ -83,11 +85,11 @@ ultriple:
         | _ -> None)) (nt_list grammar));
         grammar_bool = (List.filter_map (fun nterm_dummy -> 
       (match nterm_dummy with 
-        | Boolean (BNTerm b) -> Some {Programs.NonTerminal.name=b.name; expansions=lazy (List.map (subs_nonterms_boolean grammar) (Lazy.force b.expansions)); strongest=b.strongest}
+        | Boolean (BNTerm b) -> Some {Programs.NonTerminal.name=b.name; expansions=lazy (List.map (subs_nonterms_boolean grammar) (Lazy.force b.expansions)); strongest=b.strongest;}
         | _ -> None)) (nt_list grammar));
         grammar_stmt = (List.filter_map (fun nterm_dummy -> 
       (match nterm_dummy with 
-        | Stmt (SNTerm s) -> Some {Programs.NonTerminal.name=s.name; expansions=lazy (List.map (subs_nonterms_stmt grammar) (Lazy.force s.expansions)); strongest=s.strongest}
+        | Stmt (SNTerm s) -> Some {Programs.NonTerminal.name=s.name; expansions=lazy (List.map (subs_nonterms_stmt grammar) (Lazy.force s.expansions)); strongest=s.strongest;}
         | _ -> None)) (nt_list grammar))
       } in 
       {Proofrules.ProofRule.pre = pren; prog = (progn grammar); post = postn}      
@@ -171,7 +173,7 @@ prog_num:
   | LEFT_PAREN IF b=prog_bool THEN n1=prog_num ELSE n2=prog_num RIGHT_PAREN {fun gram -> ITE ((b gram), (n1 gram), (n2 gram))}
   | NT_KWD s = STRING {fun gram -> (if (List.exists (fun n -> (Programs.NonTerminal.name n)= s) (Lazy.force gram).grammar_num)
     then (NNTerm (List.find (fun n -> (Programs.NonTerminal.name n) = s) (Lazy.force gram).grammar_num)) 
-    else (NNTerm ({name=s; expansions=lazy []; strongest=lazy None})))
+    else (NNTerm ({name=s; expansions=lazy []; strongest=lazy None;})))
     }
   | s = STRING {fun _ -> Var s}
 
@@ -187,7 +189,7 @@ prog_bitv:
   | LEFT_PAREN IF b=prog_bool THEN btv1=prog_bitv ELSE btv2=prog_bitv RIGHT_PAREN {fun gram -> BitvITE ((b gram), (btv1 gram), (btv2 gram))}
   | NT_KWD s = STRING {fun gram -> (if (List.exists (fun n -> (Programs.NonTerminal.name n)= s) (Lazy.force gram).grammar_bitv)
     then (BitvNTerm (List.find (fun n -> (Programs.NonTerminal.name n) = s) (Lazy.force gram).grammar_bitv)) 
-    else (BitvNTerm ({name=s; expansions=lazy []; strongest=lazy None})))
+    else (BitvNTerm ({name=s; expansions=lazy []; strongest=lazy None;})))
     }
   | s = STRING {fun _ -> BitvVar s}
 
@@ -203,7 +205,7 @@ prog_bool:
  | LEFT_PAREN BVLESS n1=prog_bitv n2=prog_bitv RIGHT_PAREN {fun gram -> Less (Bitvec (n1 gram), Bitvec (n2 gram))}
  | NT_KWD s = STRING {fun gram -> (if (List.exists (fun b -> (Programs.NonTerminal.name b) = s) (Lazy.force gram).grammar_bool)
     then BNTerm (List.find (fun b -> (Programs.NonTerminal.name b) = s) (Lazy.force gram).grammar_bool)
-    else BNTerm ({name=s; expansions=lazy []; strongest=lazy None}))
+    else BNTerm ({name=s; expansions=lazy []; strongest=lazy None;}))
     }
 
 prog_stmt:
@@ -215,7 +217,7 @@ prog_stmt:
   | LEFT_PAREN WHILE b=prog_bool LEFT_FORM_DEMARCATOR f=formula_or_hole RIGHT_FORM_DEMARCATOR s=prog_stmt RIGHT_PAREN {fun gram -> While ((b gram), f, (s gram))}
   | NT_KWD s = STRING {fun gram -> (if (List.exists (fun st -> (Programs.NonTerminal.name st) = s) (Lazy.force gram).grammar_stmt)
     then SNTerm (List.find (fun st -> (Programs.NonTerminal.name st) = s) (Lazy.force gram).grammar_stmt)
-    else SNTerm ({name=s; expansions=lazy []; strongest=lazy None}))
+    else SNTerm ({name=s; expansions=lazy []; strongest=lazy None;}))
     }
 
 program:
@@ -234,10 +236,10 @@ nonterminal_defs:
   | n=nonterminal_def SEMICOLON n_list=nonterminal_defs {fun gram -> List.cons (n gram) (n_list gram)}
 
 nonterminal_def:
-  | INT_KWD name=STRING COLON expansions=prog_num_list COLON str=strongest {fun gram -> Term (Numeric (NNTerm { name = name; expansions = lazy (expansions gram); strongest = lazy str;}))}
-  | BITVEC_KWD name=STRING COLON expansions=prog_bitv_list COLON str=strongest {fun gram -> Term (Bitvec (BitvNTerm { name = name; expansions = lazy (expansions gram); strongest = lazy str;}))}
-  | BOOL_KWD name=STRING COLON expansions=prog_bool_list COLON str=strongest {fun gram -> Boolean (BNTerm { name = name; expansions = lazy (expansions gram); strongest = lazy str;})}
-  | STMT_KWD name=STRING COLON expansions=prog_stmt_list COLON str=strongest {fun gram -> Stmt (SNTerm { name = name; expansions = lazy (expansions gram); strongest = lazy str;})}
+  | INT_KWD name=STRING COLON expansions=prog_num_list COLON str=strongest {fun gram -> Term (Numeric (NNTerm { name = name; expansions = lazy (expansions gram); strongest = lazy (str (name, (VS.singleton (IntTermVar ET)), Term (Numeric (NNTerm { name = name; expansions = lazy (expansions gram); strongest = lazy None;}))));}))}
+  | BITVEC_KWD name=STRING COLON expansions=prog_bitv_list COLON str=strongest {fun gram -> Term (Bitvec (BitvNTerm { name = name; expansions = lazy (expansions gram); strongest = lazy (str (name, (VS.singleton (BitvTermVar ET)), Term (Bitvec (BitvNTerm { name = name; expansions = lazy (expansions gram); strongest = lazy None;}))));}))}
+  | BOOL_KWD name=STRING COLON expansions=prog_bool_list COLON str=strongest {fun gram -> Boolean (BNTerm { name = name; expansions = lazy (expansions gram); strongest = lazy (str (name, (VS.singleton (BoolVar BT)), Boolean (BNTerm { name = name; expansions = lazy (expansions gram); strongest = lazy None;})));})}
+  | STMT_KWD name=STRING COLON expansions=prog_stmt_list COLON str=strongest {fun gram -> Stmt (SNTerm { name = name; expansions = lazy (expansions gram); strongest = lazy (str (name, VS.empty, Stmt (SNTerm { name = name; expansions = lazy (expansions gram); strongest = lazy None; })));})}
 
 prog_bool_list:
   | LEFT_SQUARE RIGHT_SQUARE {fun _ -> []}
@@ -273,8 +275,36 @@ prog_stmts:
 
 // Parse Nonterminal "Strongest"
 strongest:
-  | NONE_KWD {None}
-  | SOME_KWD LEFT_PAREN v_list=var_pairs_list COLON form=formula_or_hole RIGHT_PAREN {Some (v_list, form)}
+  | NONE_KWD {fun _ -> None}
+  | AUTO_KWD {fun (name, extra_hole_vars, prog) -> 
+      let x_set = VS.elements (reassigned_vars_clean prog) in
+      let all_vars = VS.elements (VS.union (get_program_vars prog) extra_hole_vars) in
+      let x_z_set = (List.fold_left 
+      (fun lst x -> ((List.cons 
+      (x, (new_var_of_same_type x (fresh_var_name True (List.map var_tostr (List.append (List.map snd lst) (List.append all_vars x_set))))))
+      lst
+      )) 
+      [] x_set) in
+      
+      Some (x_z_set, BHole((Printf.sprintf "%s_hole" name), (List.map 
+        var_to_exp
+        (List.append all_vars (List.fold_left (fun lst (_, z) -> (List.cons z lst)) [] x_z_set)))))
+    }
+  | ARRAY_AUTO_KWD {fun (name, extra_hole_vars, prog) -> 
+      let x_set = VS.elements (reassigned_vars_clean prog) in
+      let all_vars = VS.elements (VS.union (get_program_vars prog) extra_hole_vars) in
+      let x_z_set = (List.fold_left 
+      (fun lst x -> ((List.cons 
+      (x, (new_var_of_same_type x (fresh_var_name True (List.map var_tostr (List.append (List.map snd lst) (List.append all_vars x_set))))))
+      lst
+      )) 
+      [] x_set) in
+      
+      Some (x_z_set, BHole((Printf.sprintf "%s_hole" name), (List.map 
+        (fun v -> (var_to_exp (to_array_var v)))
+        (List.append all_vars (List.fold_left (fun lst (_, z) -> (List.cons z lst)) [] x_z_set)))))
+    }
+  | SOME_KWD LEFT_PAREN v_list=var_pairs_list COLON form=formula_or_hole RIGHT_PAREN {fun _ -> Some (v_list, form)}
 
 var_pairs_list:
   | LEFT_SQUARE RIGHT_SQUARE {[]}

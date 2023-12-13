@@ -27,6 +27,8 @@ rule read =
   | "Stmt" {STMT_KWD} 
   | "Nonterm" {NT_KWD}
   | "None" {NONE_KWD}
+  | "AAutoHole" {ARRAY_AUTO_KWD}
+  | "AutoHole" {AUTO_KWD}
   | "Some" {SOME_KWD}
   | "Hole" {HOLE_KWD}
   | "b_t" {BT}

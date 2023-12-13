@@ -426,14 +426,7 @@ let reassigned_vars prog =
   | Stmt _ -> reassigned_vars_helper prog SNTS.empty
 
 (* Returns set of reassigned vars excluding ET and BT, unless the program is a bool or int *)
-let reassigned_vars_clean prog =
-  match prog with
-  | Term (Numeric _) ->
-      VS.add (IntTermVar ET) (reassigned_vars_helper prog SNTS.empty)
-  | Term (Bitvec _) ->
-      VS.add (BitvTermVar ET) (reassigned_vars_helper prog SNTS.empty)
-  | Boolean _ -> VS.add (BoolVar BT) (reassigned_vars_helper prog SNTS.empty)
-  | Stmt _ -> reassigned_vars_helper prog SNTS.empty
+let reassigned_vars_clean prog = reassigned_vars_helper prog SNTS.empty
 
 (* Substitution of nonterminals according to given grammar. Useful when recursively defining grammars. *)
 type grammar = {
