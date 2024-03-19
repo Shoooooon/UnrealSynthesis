@@ -68,11 +68,12 @@
 %token LEFT_FORM_DEMARCATOR
 %token RIGHT_FORM_DEMARCATOR
 %start <Proofrules.ProofRule.triple> ultriple
+%start <Proofrules.ProofRule.triple list * Proofrules.ProofRule.triple> ctxtrip
 %%
 
-// Parse UL triples.
-ultriple:
-    nt_list=grammar LEFT_FORM_DEMARCATOR pren=formula RIGHT_FORM_DEMARCATOR progn=program LEFT_FORM_DEMARCATOR postn=formula RIGHT_FORM_DEMARCATOR {
+// Parse input grammar + context + target triple.
+ctxtrip:
+    | nt_list=grammar ctx=triple_list target=triple {
       (*This will hang. We may need to make nonterminal expansions lazy. *)
       let rec grammar = lazy {
           grammar_num = (List.filter_map (fun nterm_dummy -> 
@@ -92,8 +93,44 @@ ultriple:
         | Stmt (SNTerm s) -> Some {Programs.NonTerminal.name=s.name; expansions=lazy (List.map (subs_nonterms_stmt grammar) (Lazy.force s.expansions)); strongest=s.strongest;}
         | _ -> None)) (nt_list grammar))
       } in 
-      {Proofrules.ProofRule.pre = pren; prog = (progn grammar); post = postn}      
+        (ctx grammar), (target grammar)
       }
+
+// Parse input grammar + target triple.
+ultriple:
+    | nt_list=grammar target=triple {
+      (*This will hang. We may need to make nonterminal expansions lazy. *)
+      let rec grammar = lazy {
+          grammar_num = (List.filter_map (fun nterm_dummy -> 
+      (match nterm_dummy with 
+        | Term (Numeric (NNTerm n)) -> Some {Programs.NonTerminal.name=n.name; expansions=lazy (List.map (subs_nonterms_numeric grammar) (Lazy.force n.expansions)); strongest=n.strongest}
+        | _ -> None)) (nt_list grammar));
+        grammar_bitv = (List.filter_map (fun nterm_dummy -> 
+      (match nterm_dummy with 
+        | Term (Bitvec (BitvNTerm n)) -> Some {Programs.NonTerminal.name=n.name; expansions=lazy (List.map (subs_nonterms_bitvec grammar) (Lazy.force n.expansions)); strongest=n.strongest}
+        | _ -> None)) (nt_list grammar));
+        grammar_bool = (List.filter_map (fun nterm_dummy -> 
+      (match nterm_dummy with 
+        | Boolean (BNTerm b) -> Some {Programs.NonTerminal.name=b.name; expansions=lazy (List.map (subs_nonterms_boolean grammar) (Lazy.force b.expansions)); strongest=b.strongest;}
+        | _ -> None)) (nt_list grammar));
+        grammar_stmt = (List.filter_map (fun nterm_dummy -> 
+      (match nterm_dummy with 
+        | Stmt (SNTerm s) -> Some {Programs.NonTerminal.name=s.name; expansions=lazy (List.map (subs_nonterms_stmt grammar) (Lazy.force s.expansions)); strongest=s.strongest;}
+        | _ -> None)) (nt_list grammar))
+      } in 
+        (target grammar)
+      }
+
+triple_list:
+  | LEFT_SQUARE RIGHT_SQUARE {fun _ -> []}
+  | LEFT_SQUARE trps=triples RIGHT_SQUARE {trps}
+
+triples:  
+  | trp=triple {fun grammar -> [trp grammar]}
+  | trp=triple COMMA trlist=triples {fun grammar -> List.cons (trp grammar) (trlist grammar)}
+
+triple:  
+  | LEFT_FORM_DEMARCATOR pren=formula RIGHT_FORM_DEMARCATOR progn=program LEFT_FORM_DEMARCATOR postn=formula RIGHT_FORM_DEMARCATOR {fun grammar -> {Proofrules.ProofRule.pre = pren; prog = (progn grammar); post = postn}}
 
 // Utilities for parsing formulas -- Roughly matches smt2 format except = is only for ints, and <-> is boolean equality
 form_args_list:

@@ -1,0 +1,4 @@
+[Stmt Start : [(; (bv:= x #x00000010) (bv:= y Nonterm B))] : None ;
+Bitvec B : [x, y, (bvand Nonterm B Nonterm B)] : Some ([] : (or (bv= e_t (bvand x y)) (or (bv= e_t x) (bv= e_t y))))] 
+[{|true|} Bitvec Nonterm B {|(or (bv= e_t (bvand x y)) (or (bv= e_t x) (bv= e_t y)))|}]
+ {|(bv= y #x11111111)|} Stmt Nonterm Start {|(not (bv= y #x11111010))|}

@@ -1,12 +1,19 @@
-while getopts 'cr' flag;
+while getopts 'crsblphx' flag;
 do
     case "${flag}" in
         c) convert=1;;
         r) run=1;;
+        s) run_selected=1;;
+        b) bitvec=1;;
+        l) limpt=1;;
+        p) paper=1;;
+        h) holes=1;;
+        x) context=1;;
     esac
 done
+
 if [ $convert ]; then
-	for dir in benchmarks/nope_benchmarks/CLIA_Track_IF/*/
+	for dir in benchmarks/nope_benchmarks/CLIA_Track_PLUS_Pos/*/
 	do
 		echo $dir
 		for file in ${dir}example*.txt
@@ -18,21 +25,232 @@ if [ $convert ]; then
 fi
 
 if [ $run ]; then
-	echo "START" > results.txt
+	echo "START"
 	for dir in benchmarks/nope_benchmarks/CLIA_Track_IF/*/
         do
                 echo $dir
+                cd $dir
                 for file in ${dir}example*.txt
                 do
                         # rm -f Synthesis*.sy Synthesis*.out
-                        echo $file >> results.txt
+                        echo $file
                         echo $(wc -l < $file)
                         if [ $(wc -l < $file) > 2 ]; then
-                        timeout 120 dune exec --no-build -- ULSynth -vectors=finite -holes -concise ${file}.uls >> results.txt
+                        timeout 120 _build/default/bin/main.exe -vectors=finite -holes -concise ${file}.uls
                         else
-                        timeout 120 dune exec --no-build -- ULSynth -holes -concise ${file}.uls >> results.txt
+                        timeout 120 _build/default/bin/main.exe -holes -concise ${file}.uls
                         fi
                 done
         done
 fi
 
+if [ $run_selected ]; then
+        main="$(dirname $(realpath $0))";
+        echo $main
+        dune build
+	echo "START"
+	for file in benchmarks/reformatted_nope_benchmarks/SelectedExamples/*/*_inv_*.uls
+        do
+                echo $file 
+                echo $(time timeout 300 dune exec --no-build -- ULSynth -vectors=finite -concise -expression  ${file})       
+                rm -f Synthesis*.sy Synthesis*.out Implication*.sy Implication*.smt Implication*.out
+        done
+        # rm -f Synthesis*.sy Synthesis*.out Implication*.sy Implication*.smt Implication*.out                      
+fi
+
+
+if [ $bitvec ]; then
+        main="$(dirname $(realpath $0))";
+        echo $main
+        dune build
+	echo "START"
+        if [ $holes ]; then
+                for file in benchmarks/messy_basic_bv_benchmarks/Unrealizable_With_Holes_Unspecified/*.uls
+                do
+                        # rm -f Synthesis*.sy Synthesis*.out Implication*.smt Implication*.out
+                        echo $file 
+                        echo $(time timeout 300 _build/default/bin/main.exe -holes -hole-template=bitvector -vectors=finite -concise ${file}) 
+                done
+                # rm -f Synthesis*.sy Synthesis*.out Implication*.sy Implication*.smt Implication*.out  
+        
+        else
+                for file in benchmarks_clean/messy_basic_bv_benchmarks/*.uls
+                do
+                        # rm -f Synthesis*.sy Synthesis*.out Implication*.smt Implication*.out
+                        echo $file 
+                        echo $(time timeout 30 _build/default/bin/main.exe -vectors=finite -concise  ${file}) 
+                        rm -f Synthesis*.sy Synthesis*.out Implication*.sy Implication*.smt Implication*.out  
+                done
+        fi
+fi
+
+if [ $limpt ]; then
+        main="$(dirname $(realpath $0))";
+        echo $main
+        dune build
+	echo "START"
+	for file in benchmarks/limit_point_benchmarks/*_inv_spec.uls
+        do
+                # rm -f Synthesis*.sy Synthesis*.out Implication*.smt Implication*.out
+                echo $file 
+                time timeout 300 _build/default/bin/main.exe -vectors=infinite -concise -no-vc-simplify ${file}
+                rm -f Synthesis*.sy Synthesis*.out Implication*.sy Implication*.smt Implication*.out  
+        done
+fi
+
+if [ $paper ]; then
+        main="$(dirname $(realpath $0))";
+        echo $main
+        dune build
+	echo "START"
+	if [ $holes ]; then
+                for file in benchmarks/strongest_post_paper_benchmarks_synth/simple/*.uls
+                do
+                        echo $file
+                        # rm -f Synthesis*.sy Synthesis*.out Implication*.smt Implication*.out
+                        echo $file 
+                        time timeout 300 _build/default/bin/main.exe -concise -holes -no-vc-simplify ${file}
+                        rm -f Synthesis*.sy Synthesis*.out Implication*.sy Implication*.smt Implication*.out  
+                done
+                
+                for file in benchmarks/strongest_post_paper_benchmarks_synth/finite_vec/*.uls
+                do
+                        echo $file
+                        # rm -f Synthesis*.sy Synthesis*.out Implication*.smt Implication*.out
+                        echo $file 
+                        time timeout 300 _build/default/bin/main.exe -vectors=finite -concise -holes ${file}
+                        rm -f Synthesis*.sy Synthesis*.out Implication*.sy Implication*.smt Implication*.out  
+                done
+        else
+                for file in benchmarks/strongest_post_paper_benchmarks/simple/*.uls
+                do
+                        echo $file
+                        # rm -f Synthesis*.sy Synthesis*.out Implication*.smt Implication*.out
+                        echo $file 
+                        time timeout 300 _build/default/bin/main.exe -concise  ${file}
+                        rm -f Synthesis*.sy Synthesis*.out Implication*.sy Implication*.smt Implication*.out  
+                done
+                
+                for file in benchmarks/strongest_post_paper_benchmarks/finite_vec/*.uls
+                do
+                        echo $file
+                        # rm -f Synthesis*.sy Synthesis*.out Implication*.smt Implication*.out
+                        echo $file 
+                        time timeout 300 _build/default/bin/main.exe -vectors=finite -concise  ${file}
+                        rm -f Synthesis*.sy Synthesis*.out Implication*.sy Implication*.smt Implication*.out  
+                done
+        fi
+fi
+
+if [ $context ]; then
+ main="$(dirname $(realpath $0))";
+        echo $main
+        dune build
+        echo "MESSY_BV_TESTS"
+        echo "MAX01"
+        for file in benchmarks/summary_reuse_benchmarks/messy_bv_extended/MAX01/no_context/*.uls
+        do
+                # rm -f Synthesis*.sy Synthesis*.out Implication*.smt Implication*.out
+                echo $file 
+                echo $(time timeout 30 _build/default/bin/main.exe -concise -vectors=finite ${file}) 
+                rm -f Synthesis*.sy Synthesis*.out Implication*.sy Implication*.smt Implication*.out  
+        done
+        for file in benchmarks/summary_reuse_benchmarks/messy_bv_extended/MAX01/with_context/*.uls
+        do
+                # rm -f Synthesis*.sy Synthesis*.out Implication*.smt Implication*.out
+                echo $file 
+                echo $(time timeout 30 _build/default/bin/main.exe -context -concise -vectors=finite ${file}) 
+                rm -f Synthesis*.sy Synthesis*.out Implication*.sy Implication*.smt Implication*.out  
+        done
+        echo "ADD01"
+        for file in benchmarks/summary_reuse_benchmarks/messy_bv_extended/ADD01/no_context/*.uls
+        do
+                # rm -f Synthesis*.sy Synthesis*.out Implication*.smt Implication*.out
+                echo $file 
+                echo $(time timeout 30 _build/default/bin/main.exe -concise -vectors=finite ${file}) 
+                rm -f Synthesis*.sy Synthesis*.out Implication*.sy Implication*.smt Implication*.out  
+        done
+        for file in benchmarks/summary_reuse_benchmarks/messy_bv_extended/ADD01/with_context/*.uls
+        do
+                # rm -f Synthesis*.sy Synthesis*.out Implication*.smt Implication*.out
+                echo $file 
+                echo $(time timeout 30 _build/default/bin/main.exe -context -concise -vectors=finite ${file}) 
+                rm -f Synthesis*.sy Synthesis*.out Implication*.sy Implication*.smt Implication*.out  
+        done
+        echo "XOR01"
+        for file in benchmarks/summary_reuse_benchmarks/messy_bv_extended/XOR01/no_context/*.uls
+        do
+                # rm -f Synthesis*.sy Synthesis*.out Implication*.smt Implication*.out
+                echo $file 
+                echo $(time timeout 30 _build/default/bin/main.exe -concise -vectors=finite ${file}) 
+                rm -f Synthesis*.sy Synthesis*.out Implication*.sy Implication*.smt Implication*.out  
+        done
+        for file in benchmarks/summary_reuse_benchmarks/messy_bv_extended/XOR01/with_context/*.uls
+        do
+                # rm -f Synthesis*.sy Synthesis*.out Implication*.smt Implication*.out
+                echo $file 
+                echo $(time timeout 30 _build/default/bin/main.exe -context -concise -vectors=finite ${file}) 
+                rm -f Synthesis*.sy Synthesis*.out Implication*.sy Implication*.smt Implication*.out  
+        done
+        echo "NAND01"
+        for file in benchmarks/summary_reuse_benchmarks/messy_bv_extended/NAND01/no_context/*.uls
+        do
+                # rm -f Synthesis*.sy Synthesis*.out Implication*.smt Implication*.out
+                echo $file 
+                echo $(time timeout 30 _build/default/bin/main.exe -concise -vectors=finite ${file}) 
+                rm -f Synthesis*.sy Synthesis*.out Implication*.sy Implication*.smt Implication*.out  
+        done
+        for file in benchmarks/summary_reuse_benchmarks/messy_bv_extended/NAND01/with_context/*.uls
+        do
+                # rm -f Synthesis*.sy Synthesis*.out Implication*.smt Implication*.out
+                echo $file 
+                echo $(time timeout 30 _build/default/bin/main.exe -context -concise -vectors=finite ${file}) 
+                rm -f Synthesis*.sy Synthesis*.out Implication*.sy Implication*.smt Implication*.out  
+        done
+
+	# echo "START_FROBENIUS"
+        # for file in benchmarks/summary_reuse_benchmarks/frobenius_coin/no_context/*.uls
+        # do
+        #         # rm -f Synthesis*.sy Synthesis*.out Implication*.smt Implication*.out
+        #         echo $file 
+        #         echo $(time timeout 30 _build/default/bin/main.exe -concise  ${file}) 
+        #         rm -f Synthesis*.sy Synthesis*.out Implication*.sy Implication*.smt Implication*.out  
+        # done
+        # for file in benchmarks/summary_reuse_benchmarks/frobenius_coin/with_context/*.uls
+        # do
+        #         # rm -f Synthesis*.sy Synthesis*.out Implication*.smt Implication*.out
+        #         echo $file 
+        #         echo $(time timeout 30 _build/default/bin/main.exe -context -concise  ${file}) 
+        #         rm -f Synthesis*.sy Synthesis*.out Implication*.sy Implication*.smt Implication*.out  
+        # done
+        # echo "START_SINGLE_NESTING"
+        # for file in benchmarks/summary_reuse_benchmarks/single_sided_interval/no_context/*.uls
+        # do
+        #         # rm -f Synthesis*.sy Synthesis*.out Implication*.smt Implication*.out
+        #         echo $file 
+        #         echo $(time timeout 30 _build/default/bin/main.exe -vectors=finite -concise  ${file}) 
+        #         rm -f Synthesis*.sy Synthesis*.out Implication*.sy Implication*.smt Implication*.out  
+        # done
+        # for file in benchmarks/summary_reuse_benchmarks/single_sided_interval/with_context/*.uls
+        # do
+        #         # rm -f Synthesis*.sy Synthesis*.out Implication*.smt Implication*.out
+        #         echo $file 
+        #         echo $(time timeout 30 _build/default/bin/main.exe -vectors=finite -context -concise  ${file}) 
+        #         rm -f Synthesis*.sy Synthesis*.out Implication*.sy Implication*.smt Implication*.out  
+        # done
+        # echo "START_BITVEC_AND"
+        # for file in benchmarks/summary_reuse_benchmarks/bitvec_and/no_context/*.uls
+        # do
+        #         # rm -f Synthesis*.sy Synthesis*.out Implication*.smt Implication*.out
+        #         echo $file 
+        #         echo $(time timeout 30 _build/default/bin/main.exe -concise  ${file}) 
+        #         rm -f Synthesis*.sy Synthesis*.out Implication*.sy Implication*.smt Implication*.out  
+        # done
+        # for file in benchmarks/summary_reuse_benchmarks/bitvec_and/with_context/*.uls
+        # do
+        #         # rm -f Synthesis*.sy Synthesis*.out Implication*.smt Implication*.out
+        #         echo $file 
+        #         echo $(time timeout 30 _build/default/bin/main.exe -context -concise ${file}) 
+        #         rm -f Synthesis*.sy Synthesis*.out Implication*.sy Implication*.smt Implication*.out  
+        # done
+fi

@@ -1,0 +1,4 @@
+[Int N : [0, (+ 1 Nonterm N)] : Some ([] : exists ((n Int)) forall ((i Int)) (= e_t[i] n));
+Stmt A : [(:= x (+ x Nonterm N)), (if (= y Nonterm N) then (:= x (+ x Nonterm N)) else Nonterm Start)] : Some ([(AInt x, AInt x_2)] : exists ((n Int)) forall ((i Int)) (< (+ x[i] (- x_2[i])) n)); 
+Stmt Start : [(; (:= x (+ (+ 0 x) x)) Nonterm A)] : None ]
+ {|forall ((i Int)) (= x[i] i)|} Stmt Nonterm Start {|forall ((i Int)) (= x[i] (+ (* 10 i) 14))|}

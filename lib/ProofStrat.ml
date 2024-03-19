@@ -12,17 +12,15 @@ type synthMode = HOLE_SYNTH | INVS_SPECIFIED
 type formMode = SIMPLE | FINITE_VECTOR_STATE | VECTOR_STATE
 type holeGuideMode = NONE | BITVEC
 type vcSimplificationMode = NO_SIMP | QUANTIFY_COLLECT
+type expressionMode = STMTS | EXPRESSIONS_ONLY
 
 (* Handles building proofs for the 3 types of non-terminals polymorphically.
    Reassigned_var_finder finds the reassigned vars from a given program; taking this as input lets us support simple and vector-state behaviors.
    If finite_vectors=0, vectors are treated as inifinte. Otherwise, they are treated as having length finite_vectors.*)
 
 let nonterm_handler_template expansion_to_prog nterm_to_prog
-    (vector_state : bool) nterm ctrip (finite_vectors : int)
-    (build_wpc_proof :
-      contextualized_triple_no_pre ->
-      (formula -> formula -> bool Lazy.t) ->
-      ruleApp) implies =
+    (vector_state : bool) implies preconditionSeed (finite_vectors : int) nterm
+    ctrip (build_wpc_proof : contextualized_triple_no_pre -> ruleApp) =
   let trip = ctrip.trip in
   match strongest nterm with
   | None ->
@@ -37,8 +35,7 @@ let nonterm_handler_template expansion_to_prog nterm_to_prog
                    context = ctrip.context;
                    trip =
                      { prog = expansion_to_prog expansion; post = trip.post };
-                 }
-                 implies)
+                 })
               pflist)
           (Programs.NonTerminal.expand nterm)
           []
@@ -87,78 +84,88 @@ let nonterm_handler_template expansion_to_prog nterm_to_prog
          (reassigned_var_finder trip.prog); *)
       (*Write x=z. *)
       let ghost_pre =
-        List.fold_left
-          (fun form (prog_var, ghost_var) ->
-            match (prog_var, ghost_var) with
-            | IntTermVar p, IntTermVar g ->
-                Logic.Formula.And
-                  (form, Equals (ITerm (ITVar p), ITerm (ITVar g)))
-            | BitvTermVar p, BitvTermVar g ->
-                Logic.Formula.And
-                  (form, Equals (BitvTerm (BitvTVar p), BitvTerm (BitvTVar g)))
-            | BoolVar p, BoolVar g ->
-                Logic.Formula.And (form, Iff (BVar p, BVar g))
-            | ABoolVar p, ABoolVar g ->
-                Logic.Formula.And
-                  ( form,
-                    if finite_vectors != 0 then
-                      List.fold_left
-                        (fun form index ->
-                          Logic.Formula.And
-                            ( form,
+        (* If expression-only mode is set, use the target precondition P here instead of x=z.*)
+        match preconditionSeed with
+        | Some p -> p
+        | None ->
+            List.fold_left
+              (fun form (prog_var, ghost_var) ->
+                match (prog_var, ghost_var) with
+                | IntTermVar p, IntTermVar g ->
+                    Logic.Formula.And
+                      (form, Equals (ITerm (ITVar p), ITerm (ITVar g)))
+                | BitvTermVar p, BitvTermVar g ->
+                    Logic.Formula.And
+                      ( form,
+                        Equals (BitvTerm (BitvTVar p), BitvTerm (BitvTVar g)) )
+                | BoolVar p, BoolVar g ->
+                    Logic.Formula.And (form, Iff (BVar p, BVar g))
+                | ABoolVar p, ABoolVar g ->
+                    Logic.Formula.And
+                      ( form,
+                        if finite_vectors != 0 then
+                          List.fold_left
+                            (fun form index ->
+                              Logic.Formula.And
+                                ( form,
+                                  Iff
+                                    ( ABVar (BApp (p, Int index)),
+                                      ABVar (BApp (g, Int index)) ) ))
+                            True
+                            (List.init finite_vectors (fun x -> x + 1))
+                        else
+                          Forall
+                            ( IntTermVar (T "i"),
                               Iff
-                                ( ABVar (BApp (p, Int index)),
-                                  ABVar (BApp (g, Int index)) ) ))
-                        True
-                        (List.init finite_vectors (fun x -> x + 1))
-                    else
-                      Forall
-                        ( IntTermVar (T "i"),
-                          Iff
-                            ( ABVar (BApp (p, ITVar (T "i"))),
-                              ABVar (BApp (g, ITVar (T "i"))) ) ) )
-            | AIntTermVar p, AIntTermVar g ->
-                Logic.Formula.And
-                  ( form,
-                    if finite_vectors != 0 then
-                      List.fold_left
-                        (fun form index ->
-                          Logic.Formula.And
-                            ( form,
+                                ( ABVar (BApp (p, ITVar (T "i"))),
+                                  ABVar (BApp (g, ITVar (T "i"))) ) ) )
+                | AIntTermVar p, AIntTermVar g ->
+                    Logic.Formula.And
+                      ( form,
+                        if finite_vectors != 0 then
+                          List.fold_left
+                            (fun form index ->
+                              Logic.Formula.And
+                                ( form,
+                                  Equals
+                                    ( ITerm (AITVar (ITApp (p, Int index))),
+                                      ITerm (AITVar (ITApp (g, Int index))) ) ))
+                            True
+                            (List.init finite_vectors (fun x -> x + 1))
+                        else
+                          Forall
+                            ( IntTermVar (T "i"),
                               Equals
-                                ( ITerm (AITVar (ITApp (p, Int index))),
-                                  ITerm (AITVar (ITApp (g, Int index))) ) ))
-                        True
-                        (List.init finite_vectors (fun x -> x + 1))
-                    else
-                      Forall
-                        ( IntTermVar (T "i"),
-                          Equals
-                            ( ITerm (AITVar (ITApp (p, ITVar (T "i")))),
-                              ITerm (AITVar (ITApp (g, ITVar (T "i")))) ) ) )
-            | ABitvTermVar p, ABitvTermVar g ->
-                Logic.Formula.And
-                  ( form,
-                    if finite_vectors != 0 then
-                      List.fold_left
-                        (fun form index ->
-                          Logic.Formula.And
-                            ( form,
+                                ( ITerm (AITVar (ITApp (p, ITVar (T "i")))),
+                                  ITerm (AITVar (ITApp (g, ITVar (T "i")))) ) )
+                      )
+                | ABitvTermVar p, ABitvTermVar g ->
+                    Logic.Formula.And
+                      ( form,
+                        if finite_vectors != 0 then
+                          List.fold_left
+                            (fun form index ->
+                              Logic.Formula.And
+                                ( form,
+                                  Equals
+                                    ( BitvTerm
+                                        (ABitvTVar (BitvTApp (p, Int index))),
+                                      BitvTerm
+                                        (ABitvTVar (BitvTApp (g, Int index))) )
+                                ))
+                            True
+                            (List.init finite_vectors (fun x -> x + 1))
+                        else
+                          Forall
+                            ( IntTermVar (T "i"),
                               Equals
-                                ( BitvTerm (ABitvTVar (BitvTApp (p, Int index))),
-                                  BitvTerm (ABitvTVar (BitvTApp (g, Int index)))
-                                ) ))
-                        True
-                        (List.init finite_vectors (fun x -> x + 1))
-                    else
-                      Forall
-                        ( IntTermVar (T "i"),
-                          Equals
-                            ( BitvTerm (ABitvTVar (BitvTApp (p, ITVar (T "i")))),
-                              BitvTerm (ABitvTVar (BitvTApp (g, ITVar (T "i"))))
-                            ) ) )
-            | _ -> raise (Bad_Strongest_Triple (prog_tostr trip.prog, "")))
-          True var_pairs_list
+                                ( BitvTerm
+                                    (ABitvTVar (BitvTApp (p, ITVar (T "i")))),
+                                  BitvTerm
+                                    (ABitvTVar (BitvTApp (g, ITVar (T "i")))) )
+                            ) )
+                | _ -> raise (Bad_Strongest_Triple (prog_tostr trip.prog, "")))
+              True var_pairs_list
       in
       (* Write the adapt precondition \forall y. Q_0[y/x][x/z] \rightarrow Q[y/x] *)
       (* Q_0[y/x] *)
@@ -261,17 +268,23 @@ let nonterm_handler_template expansion_to_prog nterm_to_prog
          print_endline (form_tostr adapted_pre_1); *)
       (* Q_0[y/x][x/z] *)
       let adapted_pre_2 =
-        List.fold_left
-          (fun form (x, _, z) ->
-            match x with
-            | IntTermVar x -> subs form z (Term (ITerm (ITVar x)))
-            | BitvTermVar x -> subs form z (Term (BitvTerm (BitvTVar x)))
-            | BoolVar x -> subs form z (Boolean (BVar x))
-            | AIntTermVar x -> subs form z (Term (ITerm (AITVar (ITUnApp x))))
-            | ABoolVar x -> subs form z (Boolean (ABVar (BUnApp x)))
-            | ABitvTermVar x ->
-                subs form z (Term (BitvTerm (ABitvTVar (BitvTUnApp x)))))
-          adapted_pre_1 xyz_list
+        (* Set (P -> Q_0[y/x]) instead if expression-only mode is set.
+           TODO: Pull auxiliary variables out of Q to quantify over them. *)
+        match preconditionSeed with
+        | Some _ -> Implies (ghost_pre, adapted_pre_1)
+        | None ->
+            List.fold_left
+              (fun form (x, _, z) ->
+                match x with
+                | IntTermVar x -> subs form z (Term (ITerm (ITVar x)))
+                | BitvTermVar x -> subs form z (Term (BitvTerm (BitvTVar x)))
+                | BoolVar x -> subs form z (Boolean (BVar x))
+                | AIntTermVar x ->
+                    subs form z (Term (ITerm (AITVar (ITUnApp x))))
+                | ABoolVar x -> subs form z (Boolean (ABVar (BUnApp x)))
+                | ABitvTermVar x ->
+                    subs form z (Term (BitvTerm (ABitvTVar (BitvTUnApp x)))))
+              adapted_pre_1 xyz_list
       in
       (* Q_0[y/x][x/z] \rightarrow Q[y/x] *)
       let adapted_pre_3 =
@@ -323,8 +336,7 @@ let nonterm_handler_template expansion_to_prog nterm_to_prog
                   {
                     context = bigger_context;
                     trip = { prog = expansion_to_prog expansion; post = postc };
-                  }
-                  implies)
+                  })
               (Programs.NonTerminal.expand nterm)
           in
           (* TODO - Improve T \land ... *)
@@ -600,7 +612,7 @@ let skip (ctrip : contextualized_triple_no_pre) =
     }
 
 (* NOT *)
-let not_template tv b (ctrip : contextualized_triple_no_pre) build_pf implies =
+let not_template tv b (ctrip : contextualized_triple_no_pre) build_pf =
   let trip = ctrip.trip in
   let hyp =
     build_pf
@@ -612,7 +624,6 @@ let not_template tv b (ctrip : contextualized_triple_no_pre) build_pf implies =
             post = subs trip.post tv.bt_var (Boolean (Not tv.bt_form));
           };
       }
-      implies
   in
   Not
     ( {
@@ -630,7 +641,7 @@ let not_simple = not_template simple_int_tv
 let not_vector_state = not_template vector_state_int_tv
 
 let unapp_template tv formula_unapp_on_et term
-    (ctrip : contextualized_triple_no_pre) build_pf implies =
+    (ctrip : contextualized_triple_no_pre) build_pf =
   let trip = ctrip.trip in
   let hyp =
     build_pf
@@ -643,8 +654,8 @@ let unapp_template tv formula_unapp_on_et term
               subs trip.post tv.et_var (formula_unapp_on_et tv.et_bitv_term);
           };
       }
-      implies
   in
+
   UnApp
     ( {
         context = ctrip.context;
@@ -666,7 +677,7 @@ let bitv_minus_vector_state =
       Term (BitvTerm (BitvUnarApp (Minus, x))))
 
 let binapp_template tv formula_binapp btv1 btv2
-    (ctrip : contextualized_triple_no_pre) build_pf implies =
+    (ctrip : contextualized_triple_no_pre) build_pf =
   let trip = ctrip.trip in
   let fresh = fresh_var_name trip.post [] in
   let right_hyp =
@@ -681,8 +692,8 @@ let binapp_template tv formula_binapp btv1 btv2
                 (formula_binapp (tv.strvar_to_bitv_term fresh) tv.et_bitv_term);
           };
       }
-      implies
   in
+
   let left_hyp =
     build_pf
       {
@@ -696,8 +707,8 @@ let binapp_template tv formula_binapp btv1 btv2
                 (Term (BitvTerm tv.et_bitv_term));
           };
       }
-      implies
   in
+
   BinApp
     ( {
         context = ctrip.context;
@@ -743,6 +754,10 @@ let bitv_mult_vector_state =
   binapp_template vector_state_bitv_tv (fun x y ->
       Term (BitvTerm (BitvBinarApp (Mult, x, y))))
 
+let bitv_sub_vector_state =
+  binapp_template vector_state_bitv_tv (fun x y ->
+      Term (BitvTerm (BitvBinarApp (Sub, x, y))))
+
 let bitv_or_vector_state =
   binapp_template vector_state_bitv_tv (fun x y ->
       Term (BitvTerm (BitvBinarApp (Or, x, y))))
@@ -756,8 +771,7 @@ let bitv_and_vector_state =
       Term (BitvTerm (BitvBinarApp (And, x, y))))
 
 (* AND *)
-let and_template tv b1 b2 (ctrip : contextualized_triple_no_pre) build_pf
-    implies =
+let and_template tv b1 b2 (ctrip : contextualized_triple_no_pre) build_pf =
   let trip = ctrip.trip in
   let fresh = fresh_var_name trip.post [] in
   let right_hyp =
@@ -772,8 +786,8 @@ let and_template tv b1 b2 (ctrip : contextualized_triple_no_pre) build_pf
                 (Boolean (And (tv.strvar_to_bool_form fresh, tv.bt_form)));
           };
       }
-      implies
   in
+
   let left_hyp =
     build_pf
       {
@@ -787,8 +801,8 @@ let and_template tv b1 b2 (ctrip : contextualized_triple_no_pre) build_pf
                 (Boolean tv.bt_form);
           };
       }
-      implies
   in
+
   And
     ( {
         context = ctrip.context;
@@ -806,8 +820,7 @@ let and_simple = and_template simple_int_tv
 let and_vector_state = and_template vector_state_int_tv
 
 (* OR *)
-let or_template tv b1 b2 (ctrip : contextualized_triple_no_pre) build_pf implies
-    =
+let or_template tv b1 b2 (ctrip : contextualized_triple_no_pre) build_pf =
   let trip = ctrip.trip in
   let fresh = fresh_var_name trip.post [] in
   let right_hyp =
@@ -822,8 +835,8 @@ let or_template tv b1 b2 (ctrip : contextualized_triple_no_pre) build_pf implies
                 (Boolean (Or (tv.strvar_to_bool_form fresh, tv.bt_form)));
           };
       }
-      implies
   in
+
   let left_hyp =
     build_pf
       {
@@ -837,8 +850,8 @@ let or_template tv b1 b2 (ctrip : contextualized_triple_no_pre) build_pf implies
                 (Boolean tv.bt_form);
           };
       }
-      implies
   in
+
   Or
     ( {
         context = ctrip.context;
@@ -856,8 +869,7 @@ let or_simple = or_template simple_int_tv
 let or_vector_state = or_template vector_state_int_tv
 
 (* PLUS *)
-let plus_template tv n1 n2 (ctrip : contextualized_triple_no_pre) build_pf
-    implies =
+let plus_template tv n1 n2 (ctrip : contextualized_triple_no_pre) build_pf =
   let trip = ctrip.trip in
   let fresh = fresh_var_name trip.post [] in
   let right_hyp =
@@ -873,8 +885,8 @@ let plus_template tv n1 n2 (ctrip : contextualized_triple_no_pre) build_pf
                    (ITerm (Plus (tv.strvar_to_int_term fresh, tv.et_int_term))));
           };
       }
-      implies
   in
+
   let left_hyp =
     build_pf
       {
@@ -888,8 +900,8 @@ let plus_template tv n1 n2 (ctrip : contextualized_triple_no_pre) build_pf
                 (Term (ITerm tv.et_int_term));
           };
       }
-      implies
   in
+
   Plus
     ( {
         context = ctrip.context;
@@ -907,8 +919,7 @@ let plus_simple = plus_template simple_int_tv
 let plus_vector_state = plus_template vector_state_int_tv
 
 (* MINUS *)
-let minus_template tv n (ctrip : contextualized_triple_no_pre) build_pf implies
-    =
+let minus_template tv n (ctrip : contextualized_triple_no_pre) build_pf =
   let trip = ctrip.trip in
   let hyp =
     build_pf
@@ -921,8 +932,8 @@ let minus_template tv n (ctrip : contextualized_triple_no_pre) build_pf implies
               subs trip.post tv.et_var (Term (ITerm (Minus tv.et_int_term)));
           };
       }
-      implies
   in
+
   UnaryMinus
     ( {
         context = ctrip.context;
@@ -939,8 +950,7 @@ let int_unaryminus_simple = minus_template simple_int_tv
 let int_unaryminus_vector_state = minus_template vector_state_int_tv
 
 (* EQUALS *)
-let equals_template tv t1 t2 (ctrip : contextualized_triple_no_pre) build_pf
-    implies =
+let equals_template tv t1 t2 (ctrip : contextualized_triple_no_pre) build_pf =
   let trip = ctrip.trip in
   let fresh = fresh_var_name trip.post [] in
   let right_hyp =
@@ -955,8 +965,8 @@ let equals_template tv t1 t2 (ctrip : contextualized_triple_no_pre) build_pf
                 (Boolean (Equals (tv.strvar_to_term fresh, tv.et_term)));
           };
       }
-      implies
   in
+
   let left_hyp =
     build_pf
       {
@@ -970,8 +980,8 @@ let equals_template tv t1 t2 (ctrip : contextualized_triple_no_pre) build_pf
                 (Term tv.et_term);
           };
       }
-      implies
   in
+
   Equals
     ( {
         context = ctrip.context;
@@ -1003,8 +1013,7 @@ let equals_vector_state a b =
   | _ -> raise Unsupported_Mode
 
 (* LESS *)
-let less_template tv t1 t2 (ctrip : contextualized_triple_no_pre) build_pf
-    implies =
+let less_template tv t1 t2 (ctrip : contextualized_triple_no_pre) build_pf =
   let trip = ctrip.trip in
   let fresh = fresh_var_name trip.post [] in
   let right_hyp =
@@ -1019,8 +1028,8 @@ let less_template tv t1 t2 (ctrip : contextualized_triple_no_pre) build_pf
                 (Boolean (Less (tv.strvar_to_term fresh, tv.et_term)));
           };
       }
-      implies
   in
+
   let left_hyp =
     build_pf
       {
@@ -1034,8 +1043,8 @@ let less_template tv t1 t2 (ctrip : contextualized_triple_no_pre) build_pf
                 (Term tv.et_term);
           };
       }
-      implies
   in
+
   Less
     ( {
         context = ctrip.context;
@@ -1068,7 +1077,7 @@ let less_vector_state a b =
 
 (* ASSIGN *)
 let assign_template tv input_to_prog v t (ctrip : contextualized_triple_no_pre)
-    build_pf implies =
+    build_pf =
   let trip = ctrip.trip in
   let hyp =
     build_pf
@@ -1080,8 +1089,8 @@ let assign_template tv input_to_prog v t (ctrip : contextualized_triple_no_pre)
             post = subs trip.post (tv.strvar_to_var_term v) (Term tv.et_term);
           };
       }
-      implies
   in
+
   Assign
     ( {
         context = ctrip.context;
@@ -1107,21 +1116,21 @@ let assign_bitv_vector_state =
   assign_template vector_state_bitv_tv (fun bitvt -> Term (Bitvec bitvt))
 
 (* SEQ *)
-let seq_template s1 s2 (ctrip : contextualized_triple_no_pre) build_pf implies =
+let seq_template s1 s2 (ctrip : contextualized_triple_no_pre) build_pf =
   let trip = ctrip.trip in
   let right_hyp =
     build_pf
       { context = ctrip.context; trip = { prog = Stmt s2; post = trip.post } }
-      implies
   in
+
   let left_hyp =
     build_pf
       {
         context = ctrip.context;
         trip = { prog = Stmt s1; post = (get_conclusion right_hyp).trip.pre };
       }
-      implies
   in
+
   Seq
     ( {
         context = ctrip.context;
@@ -1136,11 +1145,11 @@ let seq_template s1 s2 (ctrip : contextualized_triple_no_pre) build_pf implies =
       right_hyp )
 
 let seq_simple = seq_template
-let seq_vecor_state = seq_template
+let seq_vector_state = seq_template
 
 (* ITE *)
 let ite_simple_template prog_setter b a1 a2
-    (ctrip : contextualized_triple_no_pre) build_pf implies =
+    (ctrip : contextualized_triple_no_pre) build_pf =
   let trip = ctrip.trip in
   let else_hyp =
     build_pf
@@ -1148,16 +1157,16 @@ let ite_simple_template prog_setter b a1 a2
         context = ctrip.context;
         trip = { prog = prog_setter a2; post = trip.post };
       }
-      implies
   in
+
   let then_hyp =
     build_pf
       {
         context = ctrip.context;
         trip = { prog = prog_setter a1; post = trip.post };
       }
-      implies
   in
+
   let guard_hyp =
     build_pf
       {
@@ -1171,8 +1180,8 @@ let ite_simple_template prog_setter b a1 a2
                   Implies (Not (BVar BT), (get_conclusion else_hyp).trip.pre) );
           };
       }
-      implies
   in
+
   ITE
     ( {
         context = ctrip.context;
@@ -1192,7 +1201,7 @@ let ite_simple_bitvec = ite_simple_template (fun x -> Term (Bitvec x))
 let ite_simple_stmt = ite_simple_template (fun x -> Stmt x)
 
 let ite_vector_state_template prog_setter b a1 a2
-    (ctrip : contextualized_triple_no_pre) build_pf implies =
+    (ctrip : contextualized_triple_no_pre) build_pf =
   let trip = ctrip.trip in
   (* Make a loop variable, b_loop. *)
   let b_loop : bool_array_var = B (fresh_var_name trip.post []) in
@@ -1276,8 +1285,8 @@ let ite_vector_state_template prog_setter b a1 a2
                 };
           };
       }
-      implies
   in
+
   let then_hyp =
     build_pf
       {
@@ -1308,8 +1317,8 @@ let ite_vector_state_template prog_setter b a1 a2
                    x2y_map);
           };
       }
-      implies
   in
+
   (* TODO: Having b_loop as a pseudo-program variable causes problems when applying Adapt.
      Instead, let's just subs b_t for b_loop.
      That way, we don't need to worry about quantifying out b_loop along with our other nonterminal expansion-dependent variables.*)
@@ -1346,8 +1355,8 @@ let ite_vector_state_template prog_setter b a1 a2
                    post_p1 )); *)
           };
       }
-      implies
   in
+
   ITE
     ( {
         context = ctrip.context;
@@ -1371,23 +1380,31 @@ let ite_vector_state_bitvec =
 let ite_vector_state_stmt = ite_vector_state_template (fun x -> Stmt x)
 
 (* WHILE *)
-let while_simple b inv s (ctrip : contextualized_triple_no_pre) build_pf implies
+let while_simple implies b inv s (ctrip : contextualized_triple_no_pre) build_pf
     =
   let trip = ctrip.trip in
   (* Add free vars in Q to invariant if invariant is a hole. *)
-  let inv = 
+  let inv =
     match inv with
-    | BHole(s, vars) -> 
-      (let newvars = VS.elements (VS.filter (fun x -> (List.for_all (fun y -> (var_to_exp x) <> y) vars)) (free_vars trip.post VS.empty)) in
-      let name = (List.fold_left (fun str var -> Printf.sprintf "%s_%s" str (var_tostr var)) s newvars) in
-      BHole(name, (List.append vars (List.map var_to_exp newvars))))
-    | _ -> inv 
+    | BHole (s, vars) ->
+        let newvars =
+          VS.elements
+            (VS.filter
+               (fun x -> List.for_all (fun y -> var_to_exp x <> y) vars)
+               (free_vars trip.post VS.empty))
+        in
+        let name =
+          List.fold_left
+            (fun str var -> Printf.sprintf "%s_%s" str (var_tostr var))
+            s newvars
+        in
+        BHole (name, List.append vars (List.map var_to_exp newvars))
+    | _ -> inv
   in
   let body_hyp =
-    build_pf
-      { context = ctrip.context; trip = { prog = Stmt s; post = inv } }
-      implies
+    build_pf { context = ctrip.context; trip = { prog = Stmt s; post = inv } }
   in
+
   let guard_hyp_raw =
     build_pf
       {
@@ -1403,8 +1420,8 @@ let while_simple b inv s (ctrip : contextualized_triple_no_pre) build_pf implies
                       Implies (BVar BT, (get_conclusion body_hyp).trip.pre) ) );
           };
       }
-      implies
   in
+
   While
     ( {
         context = ctrip.context;
@@ -1426,8 +1443,8 @@ let while_simple b inv s (ctrip : contextualized_triple_no_pre) build_pf implies
 
 (* Severely underapproximate/incomplete VSWhile rule. *)
 (* The rule is I(ITE)I + P(B)(\forall i. \neg b_t[i]) => I(whileBdoS)(I \land P) *)
-let while_vector_state b inv s (ctrip : contextualized_triple_no_pre)
-    vector_length build_pf implies =
+let while_vector_state implies vector_length b inv s
+    (ctrip : contextualized_triple_no_pre) build_pf =
   let trip = ctrip.trip in
   let fresh_index = fresh_var_name trip.post [] in
   let guard_hyp =
@@ -1450,16 +1467,16 @@ let while_vector_state b inv s (ctrip : contextualized_triple_no_pre)
                    (List.init vector_length (fun x -> x + 1)));
           };
       }
-      implies
   in
+
   let ite_hyp =
     build_pf
       {
         context = ctrip.context;
         trip = { prog = Stmt (ITE (b, s, Skip)); post = inv };
       }
-      implies
   in
+
   let ite_hyp_wknd =
     Weaken
       ( {
@@ -1624,253 +1641,117 @@ let while_vector_state b inv s (ctrip : contextualized_triple_no_pre)
            implies Logic.Formula.True (get_conclusion guard_hyp_raw).trip.pre ),
        body_hyp )
 *)
-let rec build_wpc_proof (ctrip : contextualized_triple_no_pre)
-    (implies : formula -> formula -> bool Lazy.t) =
-  match ctrip.trip.prog with
-  | Term (Numeric (Int i)) -> int_simple i ctrip
-  | Term (Numeric (Var x)) -> int_var_simple x ctrip
-  | Term (Numeric (Plus (t1, t2))) ->
-      plus_simple t1 t2 ctrip build_wpc_proof implies
-  | Term (Numeric (Minus t)) ->
-      int_unaryminus_simple t ctrip build_wpc_proof implies
-  | Term (Numeric (ITE (b, n1, n2))) ->
-      ite_simple_numeric b n1 n2 ctrip build_wpc_proof implies
-  | Term (Numeric (NNTerm nterm)) ->
-      nonterm_handler_simple_numeric nterm ctrip 0 build_wpc_proof implies
-  | Term (Bitvec (Bitv btv)) -> bitv_simple btv ctrip
-  | Term (Bitvec (BitvVar x)) -> bitv_var_simple x ctrip
-  | Term (Bitvec (BitvUnApp (Minus, x))) ->
-      bitv_minus_simple x ctrip build_wpc_proof implies
-  | Term (Bitvec (BinApp (Plus, btv1, btv2))) ->
-      bitv_plus_simple btv1 btv2 ctrip build_wpc_proof implies
-  | Term (Bitvec (BinApp (Mult, btv1, btv2))) ->
-      bitv_mult_simple btv1 btv2 ctrip build_wpc_proof implies
-  | Term (Bitvec (BinApp (Sub, btv1, btv2))) ->
-      bitv_sub_simple btv1 btv2 ctrip build_wpc_proof implies
-  | Term (Bitvec (BinApp (Or, btv1, btv2))) ->
-      bitv_or_simple btv1 btv2 ctrip build_wpc_proof implies
-  | Term (Bitvec (BinApp (Xor, btv1, btv2))) ->
-      bitv_xor_simple btv1 btv2 ctrip build_wpc_proof implies
-  | Term (Bitvec (BinApp (And, btv1, btv2))) ->
-      bitv_and_simple btv1 btv2 ctrip build_wpc_proof implies
-  | Term (Bitvec (BitvITE (b, btv1, btv2))) ->
-      ite_simple_bitvec b btv1 btv2 ctrip build_wpc_proof implies
-  | Term (Bitvec (BitvNTerm nterm)) ->
-      nonterm_handler_simple_bitvec nterm ctrip 0 build_wpc_proof implies
-  | Boolean True -> true_simple ctrip
-  | Boolean False -> false_simple ctrip
-  | Boolean (Not b) -> not_simple b ctrip build_wpc_proof implies
-  | Boolean (And (b1, b2)) -> and_simple b1 b2 ctrip build_wpc_proof implies
-  | Boolean (Or (b1, b2)) -> or_simple b1 b2 ctrip build_wpc_proof implies
-  | Boolean (Equals (n1, n2)) ->
-      equals_simple n1 n2 ctrip build_wpc_proof implies
-  | Boolean (Less (n1, n2)) -> less_simple n1 n2 ctrip build_wpc_proof implies
-  | Boolean (BNTerm nterm) ->
-      nonterm_handler_simple_boolean nterm ctrip 0 build_wpc_proof implies
-  | Stmt Skip -> skip ctrip
-  | Stmt (Assign (v, t)) -> (
-      match t with
-      | Numeric n -> assign_int_simple v n ctrip build_wpc_proof implies
-      | Bitvec btv -> assign_bitv_simple v btv ctrip build_wpc_proof implies)
-  | Stmt (Seq (s1, s2)) -> seq_simple s1 s2 ctrip build_wpc_proof implies
-  | Stmt (ITE (b, s1, s2)) ->
-      ite_simple_stmt b s1 s2 ctrip build_wpc_proof implies
-  | Stmt (While (b, inv, s)) ->
-      while_simple b inv s ctrip build_wpc_proof implies
-  | Stmt (SNTerm nterm) ->
-      nonterm_handler_simple_stmt nterm ctrip 0 build_wpc_proof implies
 
-(* Recursively build proof of stuff. *)
-let rec build_wpc_proof_finite_vector_state (length : int)
-    (ctrip : contextualized_triple_no_pre)
-    (implies : formula -> formula -> bool Lazy.t) =
-  let trip = ctrip.trip in
-  match trip.prog with
-  | Term (Numeric (Int i)) -> int_vector_state i ctrip
-  | Term (Numeric (Var x)) -> int_var_vector_state x ctrip
-  | Term (Numeric (Plus (t1, t2))) ->
-      plus_vector_state t1 t2 ctrip
-        (build_wpc_proof_finite_vector_state length)
-        implies
-  | Term (Numeric (Minus t)) ->
-      int_unaryminus_vector_state t ctrip
-        (build_wpc_proof_finite_vector_state length)
-        implies
-  | Term (Numeric (ITE (b, s1, s2))) ->
-      ite_vector_state_numeric b s1 s2 ctrip
-        (build_wpc_proof_finite_vector_state length)
-        implies
-  | Term (Numeric (NNTerm nterm)) ->
-      nonterm_handler_vector_state_numeric nterm ctrip length
-        (build_wpc_proof_finite_vector_state length)
-        implies
-  | Term (Bitvec (Bitv btv)) -> bitv_vector_state btv ctrip
-  | Term (Bitvec (BitvVar v)) -> bitv_var_vector_state v ctrip
-  | Term (Bitvec (BitvUnApp (Minus, btv))) ->
-      bitv_minus_vector_state btv ctrip
-        (build_wpc_proof_finite_vector_state length)
-        implies
-  | Term (Bitvec (BinApp (Plus, btv1, btv2))) ->
-      bitv_plus_vector_state btv1 btv2 ctrip
-        (build_wpc_proof_finite_vector_state length)
-        implies
-  | Term (Bitvec (BinApp (Mult, btv1, btv2))) ->
-      bitv_mult_vector_state btv1 btv2 ctrip
-        (build_wpc_proof_finite_vector_state length)
-        implies
-  | Term (Bitvec (BinApp (Sub, btv1, btv2))) ->
-      bitv_plus_vector_state btv1 btv2 ctrip
-        (build_wpc_proof_finite_vector_state length)
-        implies
-  | Term (Bitvec (BinApp (Or, btv1, btv2))) ->
-      bitv_or_vector_state btv1 btv2 ctrip
-        (build_wpc_proof_finite_vector_state length)
-        implies
-  | Term (Bitvec (BinApp (Xor, btv1, btv2))) ->
-      bitv_xor_vector_state btv1 btv2 ctrip
-        (build_wpc_proof_finite_vector_state length)
-        implies
-  | Term (Bitvec (BinApp (And, btv1, btv2))) ->
-      bitv_and_vector_state btv1 btv2 ctrip
-        (build_wpc_proof_finite_vector_state length)
-        implies
-  | Term (Bitvec (BitvITE (b, btv1, btv2))) ->
-      ite_vector_state_bitvec b btv1 btv2 ctrip
-        (build_wpc_proof_finite_vector_state length)
-        implies
-  | Term (Bitvec (BitvNTerm nterm)) ->
-      nonterm_handler_vector_state_bitvec nterm ctrip length
-        (build_wpc_proof_finite_vector_state length)
-        implies
-  | Boolean (Equals (n1, n2)) ->
-      equals_vector_state n1 n2 ctrip
-        (build_wpc_proof_finite_vector_state length)
-        implies
-  | Boolean (Less (n1, n2)) ->
-      less_vector_state n1 n2 ctrip
-        (build_wpc_proof_finite_vector_state length)
-        implies
-  | Boolean True -> true_vector_state ctrip
-  | Boolean False -> false_vector_state ctrip
-  | Boolean (Not b) ->
-      not_vector_state b ctrip
-        (build_wpc_proof_finite_vector_state length)
-        implies
-  | Boolean (And (b1, b2)) ->
-      and_vector_state b1 b2 ctrip
-        (build_wpc_proof_finite_vector_state length)
-        implies
-  | Boolean (Or (b1, b2)) ->
-      or_vector_state b1 b2 ctrip
-        (build_wpc_proof_finite_vector_state length)
-        implies
-  | Boolean (BNTerm nterm) ->
-      nonterm_handler_vector_state_boolean nterm ctrip length
-        (build_wpc_proof_finite_vector_state length)
-        implies
-  | Stmt Skip -> skip ctrip
-  | Stmt (Assign (v, t)) -> (
-      match t with
-      | Numeric n ->
-          assign_int_vector_state v n ctrip
-            (build_wpc_proof_finite_vector_state length)
-            implies
-      | Bitvec btv ->
-          assign_bitv_vector_state v btv ctrip
-            (build_wpc_proof_finite_vector_state length)
-            implies)
-  | Stmt (Seq (s1, s2)) ->
-      seq_vecor_state s1 s2 ctrip
-        (build_wpc_proof_finite_vector_state length)
-        implies
-  | Stmt (ITE (b, s1, s2)) ->
-      ite_vector_state_stmt b s1 s2 ctrip
-        (build_wpc_proof_finite_vector_state length)
-        implies
-  | Stmt (SNTerm nterm) ->
-      nonterm_handler_vector_state_stmt nterm ctrip length
-        (build_wpc_proof_finite_vector_state length)
-        implies
-  | Stmt (While (b, inv, s)) ->
-      while_vector_state b inv s ctrip length
-        (build_wpc_proof_finite_vector_state length)
-        implies
+let build_wpc_proof_template int_handle int_var_handle plus_handle
+    int_unaryminus_handle ite_handle_numeric nonterm_handler_numeric bitv_handle
+    bitv_var_handle bitv_minus_handle bitv_plus_handle bitv_mult_handle
+    bitv_sub_handle bitv_or_handle bitv_xor_handle bitv_and_handle
+    ite_handle_bitvec nonterm_handler_bitvec true_handle false_handle not_handle
+    and_handle or_handle equals_handle less_handle nonterm_handler_boolean
+    assign_int_handle assign_bitv_handle seq_handle ite_handle_stmt while_handle
+    nonterm_handler_stmt =
+  let rec build (ctrip : contextualized_triple_no_pre) =
+    match ctrip.trip.prog with
+    | Term (Numeric (Int i)) -> int_handle i ctrip
+    | Term (Numeric (Var x)) -> int_var_handle x ctrip
+    | Term (Numeric (Plus (t1, t2))) -> plus_handle t1 t2 ctrip build
+    | Term (Numeric (Minus t)) -> int_unaryminus_handle t ctrip build
+    | Term (Numeric (ITE (b, n1, n2))) -> ite_handle_numeric b n1 n2 ctrip build
+    | Term (Numeric (NNTerm nterm)) -> nonterm_handler_numeric nterm ctrip build
+    | Term (Bitvec (Bitv btv)) -> bitv_handle btv ctrip
+    | Term (Bitvec (BitvVar x)) -> bitv_var_handle x ctrip
+    | Term (Bitvec (BitvUnApp (Minus, x))) -> bitv_minus_handle x ctrip build
+    | Term (Bitvec (BinApp (Plus, btv1, btv2))) ->
+        bitv_plus_handle btv1 btv2 ctrip build
+    | Term (Bitvec (BinApp (Mult, btv1, btv2))) ->
+        bitv_mult_handle btv1 btv2 ctrip build
+    | Term (Bitvec (BinApp (Sub, btv1, btv2))) ->
+        bitv_sub_handle btv1 btv2 ctrip build
+    | Term (Bitvec (BinApp (Or, btv1, btv2))) ->
+        bitv_or_handle btv1 btv2 ctrip build
+    | Term (Bitvec (BinApp (Xor, btv1, btv2))) ->
+        bitv_xor_handle btv1 btv2 ctrip build
+    | Term (Bitvec (BinApp (And, btv1, btv2))) ->
+        bitv_and_handle btv1 btv2 ctrip build
+    | Term (Bitvec (BitvITE (b, btv1, btv2))) ->
+        ite_handle_bitvec b btv1 btv2 ctrip build
+    | Term (Bitvec (BitvNTerm nterm)) ->
+        nonterm_handler_bitvec nterm ctrip build
+    | Boolean True -> true_handle ctrip
+    | Boolean False -> false_handle ctrip
+    | Boolean (Not b) -> not_handle b ctrip build
+    | Boolean (And (b1, b2)) -> and_handle b1 b2 ctrip build
+    | Boolean (Or (b1, b2)) -> or_handle b1 b2 ctrip build
+    | Boolean (Equals (n1, n2)) -> equals_handle n1 n2 ctrip build
+    | Boolean (Less (n1, n2)) -> less_handle n1 n2 ctrip build
+    | Boolean (BNTerm nterm) -> nonterm_handler_boolean nterm ctrip build
+    | Stmt Skip -> skip ctrip
+    | Stmt (Assign (v, t)) -> (
+        match t with
+        | Numeric n -> assign_int_handle v n ctrip build
+        | Bitvec btv -> assign_bitv_handle v btv ctrip build)
+    | Stmt (Seq (s1, s2)) -> seq_handle s1 s2 ctrip build
+    | Stmt (ITE (b, s1, s2)) -> ite_handle_stmt b s1 s2 ctrip build
+    | Stmt (While (b, inv, s)) -> while_handle b inv s ctrip build
+    | Stmt (SNTerm nterm) -> nonterm_handler_stmt nterm ctrip build
+  in
+  build
 
-let rec build_wpc_proof_vector_state (ctrip : contextualized_triple_no_pre)
+let build_wpc_proof (preconditionSeed : formula option)
     (implies : formula -> formula -> bool Lazy.t) =
-  let trip = ctrip.trip in
-  match trip.prog with
-  | Term (Numeric (Int i)) -> int_vector_state i ctrip
-  | Term (Numeric (Var x)) -> int_var_vector_state x ctrip
-  | Term (Numeric (Plus (t1, t2))) ->
-      plus_vector_state t1 t2 ctrip build_wpc_proof_vector_state implies
-  | Term (Numeric (Minus t)) ->
-      int_unaryminus_vector_state t ctrip build_wpc_proof_vector_state implies
-  | Term (Numeric (ITE (b, s1, s2))) ->
-      ite_vector_state_numeric b s1 s2 ctrip build_wpc_proof_vector_state
-        implies
-  | Term (Numeric (NNTerm nterm)) ->
-      nonterm_handler_vector_state_numeric nterm ctrip 0
-        build_wpc_proof_vector_state implies
-  | Term (Bitvec (Bitv btv)) -> bitv_vector_state btv ctrip
-  | Term (Bitvec (BitvVar x)) -> bitv_var_vector_state x ctrip
-  | Term (Bitvec (BitvUnApp (Minus, btv))) ->
-      bitv_minus_vector_state btv ctrip build_wpc_proof_vector_state implies
-  | Term (Bitvec (BinApp (Plus, btv1, btv2))) ->
-      bitv_plus_vector_state btv1 btv2 ctrip build_wpc_proof_vector_state
-        implies
-  | Term (Bitvec (BinApp (Mult, btv1, btv2))) ->
-      bitv_mult_vector_state btv1 btv2 ctrip build_wpc_proof_vector_state
-        implies
-  | Term (Bitvec (BinApp (Sub, btv1, btv2))) ->
-      bitv_plus_vector_state btv1 btv2 ctrip build_wpc_proof_vector_state
-        implies
-  | Term (Bitvec (BinApp (Or, btv1, btv2))) ->
-      bitv_or_vector_state btv1 btv2 ctrip build_wpc_proof_vector_state implies
-  | Term (Bitvec (BinApp (Xor, btv1, btv2))) ->
-      bitv_xor_vector_state btv1 btv2 ctrip build_wpc_proof_vector_state implies
-  | Term (Bitvec (BinApp (And, btv1, btv2))) ->
-      bitv_and_vector_state btv1 btv2 ctrip build_wpc_proof_vector_state implies
-  | Term (Bitvec (BitvITE (b, s1, s2))) ->
-      ite_vector_state_bitvec b s1 s2 ctrip build_wpc_proof_vector_state implies
-  | Term (Bitvec (BitvNTerm nterm)) ->
-      nonterm_handler_vector_state_bitvec nterm ctrip 0
-        build_wpc_proof_vector_state implies
-  | Boolean (Equals (n1, n2)) ->
-      equals_vector_state n1 n2 ctrip build_wpc_proof_vector_state implies
-  | Boolean (Less (n1, n2)) ->
-      less_vector_state n1 n2 ctrip build_wpc_proof_vector_state implies
-  | Boolean True -> true_vector_state ctrip
-  | Boolean False -> false_vector_state ctrip
-  | Boolean (Not b) ->
-      not_vector_state b ctrip build_wpc_proof_vector_state implies
-  | Boolean (And (b1, b2)) ->
-      and_vector_state b1 b2 ctrip build_wpc_proof_vector_state implies
-  | Boolean (Or (b1, b2)) ->
-      or_vector_state b1 b2 ctrip build_wpc_proof_vector_state implies
-  | Boolean (BNTerm nterm) ->
-      nonterm_handler_vector_state_boolean nterm ctrip 0
-        build_wpc_proof_vector_state implies
-  | Stmt Skip -> skip ctrip
-  | Stmt (Assign (v, t)) -> (
-      match t with
-      | Numeric n ->
-          assign_int_vector_state v n ctrip build_wpc_proof_vector_state implies
-      | Bitvec btv ->
-          assign_bitv_vector_state v btv ctrip build_wpc_proof_vector_state
-            implies)
-  | Stmt (Seq (s1, s2)) ->
-      seq_vecor_state s1 s2 ctrip build_wpc_proof_vector_state implies
-  | Stmt (ITE (b, s1, s2)) ->
-      ite_vector_state_stmt b s1 s2 ctrip build_wpc_proof_vector_state implies
-  | Stmt (SNTerm nterm) ->
-      nonterm_handler_vector_state_stmt nterm ctrip 0
-        build_wpc_proof_vector_state implies
-  | Stmt (While (b, inv, s)) ->
-      while_vector_state b inv s ctrip 0 build_wpc_proof_vector_state implies
+  build_wpc_proof_template int_simple int_var_simple plus_simple
+    int_unaryminus_simple ite_simple_numeric
+    (nonterm_handler_simple_numeric implies preconditionSeed 0)
+    bitv_simple bitv_var_simple bitv_minus_simple bitv_plus_simple
+    bitv_mult_simple bitv_sub_simple bitv_or_simple bitv_xor_simple
+    bitv_and_simple ite_simple_bitvec
+    (nonterm_handler_simple_bitvec implies preconditionSeed 0)
+    true_simple false_simple not_simple and_simple or_simple equals_simple
+    less_simple
+    (nonterm_handler_simple_boolean implies preconditionSeed 0)
+    assign_int_simple assign_bitv_simple seq_simple ite_simple_stmt
+    (while_simple implies)
+    (nonterm_handler_simple_stmt implies preconditionSeed 0)
 
-let prove (trip : triple) (smode : synthMode) (fmode : formMode)
-    (hole_grm_mode : holeGuideMode) (vc_simp : vcSimplificationMode) =
+let build_wpc_proof_vector_state (preconditionSeed : formula option)
+    (implies : formula -> formula -> bool Lazy.t) =
+  build_wpc_proof_template int_vector_state int_var_vector_state
+    plus_vector_state int_unaryminus_vector_state ite_vector_state_numeric
+    (nonterm_handler_vector_state_numeric implies preconditionSeed 0)
+    bitv_vector_state bitv_var_vector_state bitv_minus_vector_state
+    bitv_plus_vector_state bitv_mult_vector_state bitv_sub_vector_state
+    bitv_or_vector_state bitv_xor_vector_state bitv_and_vector_state
+    ite_vector_state_bitvec
+    (nonterm_handler_vector_state_bitvec implies preconditionSeed 0)
+    true_vector_state false_vector_state not_vector_state and_vector_state
+    or_vector_state equals_vector_state less_vector_state
+    (nonterm_handler_vector_state_boolean implies preconditionSeed 0)
+    assign_int_vector_state assign_bitv_vector_state seq_vector_state
+    ite_vector_state_stmt
+    (while_vector_state implies 0)
+    (nonterm_handler_vector_state_stmt implies preconditionSeed 0)
+
+let build_wpc_proof_finite_vector_state (preconditionSeed : formula option)
+    (implies : formula -> formula -> bool Lazy.t) (length : int) =
+  build_wpc_proof_template int_vector_state int_var_vector_state
+    plus_vector_state int_unaryminus_vector_state ite_vector_state_numeric
+    (nonterm_handler_vector_state_numeric implies preconditionSeed length)
+    bitv_vector_state bitv_var_vector_state bitv_minus_vector_state
+    bitv_plus_vector_state bitv_mult_vector_state bitv_sub_vector_state
+    bitv_or_vector_state bitv_xor_vector_state bitv_and_vector_state
+    ite_vector_state_bitvec
+    (nonterm_handler_vector_state_bitvec implies preconditionSeed length)
+    true_vector_state false_vector_state not_vector_state and_vector_state
+    or_vector_state equals_vector_state less_vector_state
+    (nonterm_handler_vector_state_boolean implies preconditionSeed length)
+    assign_int_vector_state assign_bitv_vector_state seq_vector_state
+    ite_vector_state_stmt
+    (while_vector_state implies length)
+    (nonterm_handler_vector_state_stmt implies preconditionSeed length)
+
+let prove (ctx : triple list) (trip : triple) (smode : synthMode) (fmode : formMode)
+    (hole_grm_mode : holeGuideMode) (vc_simp : vcSimplificationMode)
+    (expmode : expressionMode) =
   (* Imp is the implication handling module. The proof mode determines which module we use.
      Each module is set up as a 0-ary functor because the modules returned preserve a notion of state.
      Statefulness is necessary to gather implications, discharge them in parallel, etc.
@@ -1909,22 +1790,23 @@ let prove (trip : triple) (smode : synthMode) (fmode : formMode)
         : Implications.ImplicationHandler)
   in
   let length = Logic.Formula.max_index (Boolean (And (trip.pre, trip.post))) in
+  let preconditionSeed =
+    if expmode == EXPRESSIONS_ONLY then Some trip.pre else None
+  in
   let build =
     match fmode with
-    | SIMPLE -> build_wpc_proof
+    | SIMPLE -> build_wpc_proof preconditionSeed Imp.implies
     | FINITE_VECTOR_STATE ->
         (* Check max vector length referenced. *)
-        build_wpc_proof_finite_vector_state length
-    | VECTOR_STATE -> build_wpc_proof_vector_state
+        build_wpc_proof_finite_vector_state preconditionSeed Imp.implies length
+    | VECTOR_STATE -> build_wpc_proof_vector_state preconditionSeed Imp.implies
   in
   let strongest =
-    build
-      { context = []; trip = { prog = trip.prog; post = trip.post } }
-      Imp.implies
+    build { context = ctx; trip = { prog = trip.prog; post = trip.post } }
   in
   let full_pf =
     Weaken
-      ( { context = []; trip },
+      ( { context = ctx; trip },
         strongest,
         Imp.implies trip.pre (get_conclusion strongest).trip.pre )
   in

@@ -1,0 +1,5 @@
+[Bitvec V : [x, y] : None;
+         Bitvec E : [(bvxor Nonterm V Nonterm V)] : None;
+         Stmt S : [(; Nonterm S1 Nonterm S1)] : None;
+         Stmt S1 : [(bv:= x Nonterm E), (bv:= y Nonterm E)] : None]
+                 {|(and (bv= x[1] #x00000006) (and (bv= y[1] #x00000009) (and (bv= x[2] #x0000002c) (bv= y[2] #x000000f7))))|} Stmt Nonterm S {|(not (and (bv= x[2] #x000000f7) (and (bv= y[2] #x0000002c) (and (bv= x[1] #x00000009) (bv= y[1] #x00000006)))))|}

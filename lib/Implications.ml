@@ -240,12 +240,15 @@ module Quantify_Collect : VCSimpStrat = struct
             deconjunctivizer_lhs body (VS.add v varset)
           in
           (form, varset, VS.add v existed)
-    (* We aren't dealing with implications on LHS -- too complicated and doesn't occur in the system. *)
     (* For conjunctions, we might as well pull out \exists *)
     | And (a, b) ->
         let a_new, varset, a_existed = deconjunctivizer_lhs a varset in
         let b_new, varset, b_existed = deconjunctivizer_lhs b varset in
         (And (a_new, b_new), varset, VS.union a_existed b_existed)
+    (* Same with implication RHS's *)
+    | Implies (_, b) ->
+      (* This is kind of incomplete, but it covers the cases we currently support. *)
+      deconjunctivizer_lhs b varset
     | _ -> (form, varset, VS.empty)
 
   (* Returns list of form * previously_existed_vars and set of active var names. *)
@@ -1301,24 +1304,26 @@ let no_hole_simple_implicator_z3 () =
           lazy
             ((* This is truly bad, but idk how to wait on either process to finish.
                 Internet seems to not know either. *)
-             let i = ref 1
-             and out = ref false in
-             while !i < 2 do
-               let a = ref (0, Unix.WEXITED 0)
-               and b = ref (0, Unix.WEXITED 0) in
+             let ai = ref 0 
+              and bi = ref 0
+              and out = ref false
+              and a = ref (0, Unix.WEXITED 0)
+              and b = ref (0, Unix.WEXITED 0)
+              in
+             while (!ai + !bi) < 2 do
                while
-                 a := Unix.waitpid [ Unix.WNOHANG ] kid_pid;
-                 b := Unix.waitpid [ Unix.WNOHANG ] kid_pid2;
+                 a := if !ai < 1 then Unix.waitpid [ Unix.WNOHANG ] kid_pid else !a;
+                 b := if !bi < 1 then Unix.waitpid [ Unix.WNOHANG ] kid_pid2 else !b;
                  fst !a = 0 && fst !b = 0
                do
                  Unix.sleep 1
                done;
                if fst !a = kid_pid && snd !a <> Unix.WEXITED 0 then (
-                 i := !i + 1;
-                 a := (0, Unix.WEXITED 0))
+                  ai := 1;
+                  a := (0, Unix.WEXITED 0))
                else ();
                if fst !b = kid_pid2 && snd !b <> Unix.WEXITED 0 then (
-                 i := !i + 1;
+                 bi := 1;
                  b := (0, Unix.WEXITED 0))
                else ();
                if fst !a = kid_pid && fst !b = kid_pid2 then
@@ -1327,39 +1332,40 @@ let no_hole_simple_implicator_z3 () =
                      (open_in (Printf.sprintf "%s.out" filename_pref))
                  in
                  if result = Some "unsat" then (
-                   i := 2;
+                   ai := 2;
                    out := true)
-                 else if result = Some "sat" then i := 2
+                 else if result = Some "sat" then ai := 2
                  else
+                   ai := 1;
                    let result =
                      In_channel.input_line
                        (open_in (Printf.sprintf "%s.sy.out" filename_pref))
                    in
                    if result = Some "(" then (
-                     i := 2;
+                     bi := 2;
                      out := true)
-                   else i := 2
+                   else bi := 2
                else if fst !a = kid_pid then
                  let result =
                    In_channel.input_line
                      (open_in (Printf.sprintf "%s.out" filename_pref))
                  in
                  if result = Some "unsat" then (
-                   i := 2;
+                   ai := 2;
                    out := true)
-                 else if result = Some "sat" then i := 2
-                 else i := !i + 1
+                 else if result = Some "sat" then ai := 2
+                 else ai := 1
                else if fst !b = kid_pid2 then
                  let result =
                    In_channel.input_line
                      (open_in (Printf.sprintf "%s.sy.out" filename_pref))
                  in
                  if result = Some "(" then (
-                   i := 2;
+                   bi := 2;
                    out := true)
-                 else if result = Some "infeasible" then i := !i + 1
-                 else i := !i + 1
-               else i := 2
+                 else if result = Some "infeasible" then bi := 2
+                 else bi := 1
+               else bi := 2
              done;
              file_logger :=
                List.map
@@ -1587,7 +1593,7 @@ let no_hole_vector_state_implicator_vampire () =
                "--input_syntax";
                "smtlib2";
                "-t";
-               "600s";
+               "60s";
                Printf.sprintf "%s.smt" filename_pref;
              ]))
       else

@@ -1,0 +1,5 @@
+[Bitvec E : [x, y, (bvnot Nonterm E)] : Some ([] : (=> 
+            (and (<-> (bv= (bvand x[2] #x00000001) #x00000001) (bv= #x00000002 (bvand x[2] #x00000002))) (<-> (bv= (bvand y[2] #x00000001) #x00000001) (bv= #x00000002 (bvand y[2] #x00000002))))
+            (<-> (bv= (bvand e_t[2] #x00000001) #x00000001) (bv= #x00000002 (bvand e_t[2] #x00000002)))));
+    Bitvec S: [(bvand Nonterm E (bvand Nonterm E (bvand Nonterm E (bvand Nonterm E (bvand Nonterm E (bvand Nonterm E Nonterm E))))))] : None  ]
+{|(and (bv= x[2] #x000000f7) (and (bv= y[2] #x0000002c) (and (bv= x[1] #x00000009) (bv= y[1] #x00000006))))|} Bitvec Nonterm S {|(not (and (bv= e_t[1] #x0000001f) (bv= e_t[2] #x000000d1)))|}

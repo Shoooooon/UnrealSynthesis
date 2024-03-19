@@ -1,0 +1,9 @@
+[Bool B : [(bv< Nonterm E Nonterm E)] : None;
+Bitvec E : [x, y, (bvor Nonterm E Nonterm E), (bvand Nonterm E Nonterm E)] : Some ([(ABitvec e_t, ABitvec e_t_2)] : 
+(and (=> (bv= (bvand x[1] #x00000001) (bvand y[1] #x00000001)) (bv= (bvand x[1] #x00000001) (bvand e_t[1] #x00000001))) 
+(=> (bv< (bvand y[1] #x00000001) (bvand x[1] #x00000001)) (or (bv= #x00000000 (bvand e_t[1] #x00000001)) (bv= (bvand x[1] #x00000002) (bvand e_t[1] #x00000002))))));
+Stmt S : [(bv:= x Nonterm E), (bv:= y Nonterm E), (; Nonterm S Nonterm S)] : Some ([(ABitvec x, ABitvec x_2);(ABitvec y, ABitvec y_2)] : 
+(and (=> (bv= (bvand x_2[1] #x00000001) (bvand y_2[1] #x00000001)) (and (bv= (bvand x_2[1] #x00000001) (bvand x[1] #x00000001)) (bv= (bvand x_2[1] #x00000001) (bvand y[1] #x00000001)))) 
+(=> (bv< (bvand y_2[1] #x00000001) (bvand x_2[1] #x00000001)) (and (or (bv= #x00000000 (bvand x[1] #x00000001)) (bv= (bvand x[1] #x00000002) (bvand x_2[1] #x00000002))) (or (bv= #x00000000 (bvand y[1] #x00000001)) (bv= (bvand y[1] #x00000002) (bvand x_2[1] #x00000002)))))));
+Stmt Start : [(while Nonterm B {|(or (bv= (bvand x[1] #x00000001) (bvand y[1] #x00000001)) (or (bv= #x00000003 (bvand x[1] #x00000003)) (bv= #x00000003 (bvand y[1] #x00000003))))|} Nonterm S) ] : None]
+             {|(and (bv= x[1] #x0000000f) (and (bv= x[2] #x000000db) (bv= x[3] #x00000001)))|} Stmt Nonterm Start {|(not (and (bv= x[3] #x0000000e) (and (bv= y[3] #x0000000f) (and (bv= x[2] #x000000f7) (and (bv= y[2] #x0000002c) (and (bv= x[1] #x00000006) (bv= y[1] #x00000009)))))))|}

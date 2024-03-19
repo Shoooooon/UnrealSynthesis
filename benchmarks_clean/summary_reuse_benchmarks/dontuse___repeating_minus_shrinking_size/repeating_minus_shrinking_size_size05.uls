@@ -1,0 +1,3 @@
+[Stmt Start : [(; (; Nonterm A (:= k (+ k (- 2)))) (; (; Nonterm A (:= k (+ k (- 2)))) (; (; Nonterm A (:= k (+ k (- 2)))) (; (; Nonterm A (:= k (+ k (- 2)))) (; Nonterm A (:= k (+ k (- 2))))))))] : None ;
+Stmt A : [skip, (; (:= x (+ x (- k))) Nonterm A)] : Some ([(Int x, Int x_2)] : exists ((n Int)) (and (>= n 0) (= x (+ x_2 (- (* n k))))) )] 
+ {|(and (= k 10) (= x 2))|} Stmt Nonterm Start {|(not (= x 0))|}

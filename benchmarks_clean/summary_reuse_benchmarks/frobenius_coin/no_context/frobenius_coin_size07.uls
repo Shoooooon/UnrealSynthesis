@@ -1,0 +1,4 @@
+[Int N : [0, (+ 1 Nonterm N)] : Some ([(Int e_t, Int e_t_2)] : (>= e_t 0));
+Stmt Start : [(; (; (:= k 111) Nonterm A) (; (; (:= k 107) Nonterm A) (; (; (:= k 105) Nonterm A) (; (; (:= k 103) Nonterm A) (; (; (:= k 102) Nonterm A) (; (; (:= k 101) Nonterm A) (; (:= k 100) Nonterm A)))))))] : None ;
+Stmt A : [skip, (; (:= x (+ x k)) Nonterm A)] : Some ([(Int x, Int x_2)] : exists ((n Int)) (and (>= n 0) (= x (+ x_2 (* n k)))) )] 
+ {|(= x 0)|} Stmt Nonterm Start {|(not (= x 887))|}
